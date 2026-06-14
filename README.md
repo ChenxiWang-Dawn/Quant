@@ -14,7 +14,7 @@
 
 ## 目录
 
-- `learning-log/`：每月学习日志
+- `learning-log/`：学习日志
 - `notes/`：知识笔记
 - `notebooks/`：实验代码
 - `src/`：可复用代码
