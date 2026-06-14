@@ -1,4 +1,8 @@
-# Quant-For-Beginners_Notes
+# Quant-For-Beginners 学习笔记
+
+> **资料来源**：[Datawhale - Quant-For-Beginners](https://github.com/datawhalechina/Quant-For-Beginners)
+> 本笔记内容整理自 Datawhale 社区的开源量化投资入门课程，仅供个人学习使用。
+> 版权归 Datawhale 及原课程作者所有。
 
 ## 周五分享
 
