@@ -2,7 +2,7 @@
 
 ## 周五分享
 
-# ![img](https://ima-notebook-prod.image.myqcloud.com/2/SHkMCeYFibzlFtfpda0fYP/file_manager/019ebbf8f5cf764dae7dff3a22d56f32.png?q-sign-algorithm=sha1&q-ak=REDACTED&q-sign-time=1781443966%3B1781472766&q-key-time=1781443966%3B1781472766&q-header-list=&q-url-param-list=&q-signature=1d66391afb07b1601afd5b9494071abd5b9e1cda)
+# ![img](./assets/019ebbf8f5cf764dae7dff3a22d56f32.png)
 
 1. AI 时代要学习代码 直觉
 2. AI 在表层制造了民主化的热烈现象、深层加剧了认知和资源的不平等
