@@ -108,9 +108,34 @@
    | **金叉** | MA5 **从下往上** 穿过 MA20 | 短期变强，常被看作 **偏多 / 买入信号** |
    | **死叉** | MA5 **从上往下** 穿过 MA20 | 短期变弱，常被看作 **偏空 / 卖出信号** |
 
+5. 双均线策略（Moving Average Crossover）
 
+   ```python
+   df['signal'] = (df['MA5'] > df['MA20']).astype(int)  # 满足条件=1，否则=0
+   
+   df['trade'] = 0                              # 默认无交易
+   df.loc[df['cross'] > 0, 'trade'] = 1         # 金叉日标记买入
+   df.loc[df['cross'] < 0, 'trade'] = -1        # 死叉日标记卖出
+   
+   df['signal']=(df['MA5'] > df['MA20']).astype(int)
+   df['trade']=0
+   df.loc[df['cross']>0,'trade']=1
+   df.loc[df['cross'] < 0, 'trade']=-1
+   
+   buys = df[df['trade'] == 1]
+   sells = df[df['trade'] == -1]
+   ```
 
+   ---
 
+   
+
+## 04 策略回测
+
+1. 回测：用历史数据，假装你过去真的按规则交易了一遍。
+2. 回测是体检，不是算命。、
+3. 胜率：每轮交易的胜率
+4. 最大回撤
 
 
 
