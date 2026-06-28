@@ -1,6 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 .DS_Store
+.claude/
 
 data/
 *.csv
@@ -10,4 +11,9 @@ data/
 
 .env
 .venv/
+.uv-python/
 *.log
+
+# Python virtual environments anywhere
+**/.venv/
+**/.uv-python/
