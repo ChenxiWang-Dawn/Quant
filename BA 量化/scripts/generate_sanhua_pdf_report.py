@@ -8,19 +8,17 @@ from pathlib import Path
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import (
     Image as RLImage,
-    KeepTogether,
     PageBreak,
     Paragraph,
     SimpleDocTemplate,
-    Spacer,
     Table,
     TableStyle,
 )
@@ -33,13 +31,15 @@ TMP_DIR = ROOT / "tmp" / "pdfs"
 REPORT_PATH = OUT_DIR / "sanhua_002050_stock_analysis_report.pdf"
 CHART_PATH = TMP_DIR / "sanhua_002050_price_volume.png"
 
-FONT_PATH = Path("/Library/Fonts/Arial Unicode.ttf")
-FONT_NAME = "ArialUnicode"
+FONT_PATH = Path("/System/Library/Fonts/Supplemental/Songti.ttc")
+FONT_NAME = "STSong-Light"
+FONT_SIZE = 10.5
+LINE_HEIGHT = FONT_SIZE * 1.5
 
 
 def setup_fonts() -> None:
     if FONT_PATH.exists():
-        pdfmetrics.registerFont(TTFont(FONT_NAME, str(FONT_PATH)))
+        pdfmetrics.registerFont(UnicodeCIDFont(FONT_NAME))
     else:
         raise FileNotFoundError(f"中文字体不存在：{FONT_PATH}")
 
@@ -237,76 +237,98 @@ def make_styles() -> dict:
             "TitleCN",
             parent=base["Title"],
             fontName=FONT_NAME,
-            fontSize=24,
-            leading=32,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             alignment=TA_CENTER,
             textColor=colors.HexColor("#17202A"),
-            spaceAfter=12,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "subtitle": ParagraphStyle(
             "SubtitleCN",
             parent=base["Normal"],
             fontName=FONT_NAME,
-            fontSize=10.5,
-            leading=15,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             alignment=TA_CENTER,
             textColor=colors.HexColor("#667085"),
-            spaceAfter=16,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "h1": ParagraphStyle(
             "H1CN",
             parent=base["Heading1"],
             fontName=FONT_NAME,
-            fontSize=15,
-            leading=20,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             textColor=colors.HexColor("#2057A8"),
-            spaceBefore=8,
-            spaceAfter=8,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "h2": ParagraphStyle(
             "H2CN",
             parent=base["Heading2"],
             fontName=FONT_NAME,
-            fontSize=12,
-            leading=16,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             textColor=colors.HexColor("#17202A"),
-            spaceBefore=6,
-            spaceAfter=6,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "body": ParagraphStyle(
             "BodyCN",
             parent=base["BodyText"],
             fontName=FONT_NAME,
-            fontSize=9.5,
-            leading=15,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             textColor=colors.HexColor("#344054"),
-            alignment=TA_LEFT,
-            spaceAfter=6,
+            alignment=TA_JUSTIFY,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "small": ParagraphStyle(
             "SmallCN",
             parent=base["BodyText"],
             fontName=FONT_NAME,
-            fontSize=8,
-            leading=11,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             textColor=colors.HexColor("#667085"),
+            alignment=TA_JUSTIFY,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "table_cell": ParagraphStyle(
             "TableCellCN",
             parent=base["BodyText"],
             fontName=FONT_NAME,
-            fontSize=8,
-            leading=11,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             textColor=colors.HexColor("#17202A"),
+            alignment=TA_JUSTIFY,
+            spaceBefore=0,
+            spaceAfter=0,
             wordWrap="CJK",
+        ),
+        "caption": ParagraphStyle(
+            "CaptionCN",
+            parent=base["BodyText"],
+            fontName=FONT_NAME,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
+            textColor=colors.HexColor("#17202A"),
+            alignment=TA_CENTER,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
         "right": ParagraphStyle(
             "RightCN",
             parent=base["BodyText"],
             fontName=FONT_NAME,
-            fontSize=8.5,
-            leading=11,
+            fontSize=FONT_SIZE,
+            leading=LINE_HEIGHT,
             alignment=TA_RIGHT,
+            spaceBefore=0,
+            spaceAfter=0,
         ),
     }
 
@@ -315,13 +337,18 @@ def paragraph(text: str, styles: dict, style: str = "body") -> Paragraph:
     return Paragraph(text, styles[style])
 
 
+def add_numbered_items(story: list, items: list[str], styles: dict) -> None:
+    for index, item in enumerate(items, start=1):
+        story.append(paragraph(f"（{index}）{item}", styles))
+
+
 def style_table(table: Table, header_rows: int = 1) -> Table:
     table.setStyle(
         TableStyle(
             [
                 ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                ("LEADING", (0, 0), (-1, -1), 11),
+                ("FONTSIZE", (0, 0), (-1, -1), FONT_SIZE),
+                ("LEADING", (0, 0), (-1, -1), LINE_HEIGHT),
                 ("BACKGROUND", (0, 0), (-1, header_rows - 1), colors.HexColor("#EAF1FB")),
                 ("TEXTCOLOR", (0, 0), (-1, header_rows - 1), colors.HexColor("#17202A")),
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D8DEE8")),
@@ -329,8 +356,8 @@ def style_table(table: Table, header_rows: int = 1) -> Table:
                 ("ROWBACKGROUNDS", (0, header_rows), (-1, -1), [colors.white, colors.HexColor("#FAFBFD")]),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
             ]
         )
     )
@@ -408,7 +435,7 @@ def make_observations(metrics: dict) -> list[str]:
 
 def on_page(canvas, doc):
     canvas.saveState()
-    canvas.setFont(FONT_NAME, 8)
+    canvas.setFont(FONT_NAME, FONT_SIZE)
     canvas.setFillColor(colors.HexColor("#667085"))
     canvas.drawString(doc.leftMargin, 1.05 * cm, "数据源：Ricequant RQData / rqdatac.get_price")
     canvas.drawRightString(A4[0] - doc.rightMargin, 1.05 * cm, f"第 {doc.page} 页")
@@ -439,12 +466,9 @@ def build_pdf(metadata: dict, df: pd.DataFrame, metrics: dict, chart_path: Path)
         )
     )
     story.append(paragraph("一、核心结论", styles, "h1"))
-    for item in make_observations(metrics):
-        story.append(paragraph(f"• {item}", styles))
-    story.append(Spacer(1, 0.2 * cm))
+    add_numbered_items(story, make_observations(metrics), styles)
     story.append(paragraph("二、关键指标", styles, "h1"))
     story.append(make_summary_table(metrics))
-    story.append(Spacer(1, 0.25 * cm))
     story.append(
         paragraph(
             f"报告生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}；原始数据文件：data/sanhua_002050_xshe_daily_last_year.json。",
@@ -462,7 +486,7 @@ def build_pdf(metadata: dict, df: pd.DataFrame, metrics: dict, chart_path: Path)
         )
     )
     story.append(RLImage(str(chart_path), width=17.2 * cm, height=9.36 * cm))
-    story.append(Spacer(1, 0.2 * cm))
+    story.append(paragraph("图 1  三花智控（002050.XSHE）近一年日线 K 线与成交量", styles, "caption"))
     story.append(paragraph("四、量价解读", styles, "h1"))
     story.append(
         paragraph(
@@ -480,7 +504,6 @@ def build_pdf(metadata: dict, df: pd.DataFrame, metrics: dict, chart_path: Path)
 
     story.append(paragraph("五、最近 12 个交易日明细", styles, "h1"))
     story.append(make_recent_table(df))
-    story.append(Spacer(1, 0.25 * cm))
     story.append(PageBreak())
 
     story.append(paragraph("六、量化交易基础说明", styles, "h1"))
@@ -493,12 +516,9 @@ def build_pdf(metadata: dict, df: pd.DataFrame, metrics: dict, chart_path: Path)
         "决策可重复：同一套策略在相同数据和参数下会得到一致结果，便于团队协作、审计和长期跟踪。",
         "更适合数据驱动研究：量化方法可以把价格、成交量、财务、估值、新闻、宏观等多源数据转化为可检验的信号。",
     ]
-    for item in quant_advantages:
-        story.append(paragraph(f"• {item}", styles))
-    story.append(Spacer(1, 0.15 * cm))
+    add_numbered_items(story, quant_advantages, styles)
     story.append(paragraph("2. 基本概念：K 线、基本面、技术面", styles, "h2"))
     story.append(make_concept_table(styles))
-    story.append(Spacer(1, 0.25 * cm))
     story.append(PageBreak())
 
     story.append(paragraph("七、方法说明与风险提示", styles, "h1"))
@@ -509,8 +529,7 @@ def build_pdf(metadata: dict, df: pd.DataFrame, metrics: dict, chart_path: Path)
         "年化波动率基于日收益率标准差并按 252 个交易日折算；最大回撤基于收盘价序列计算。",
         "本报告仅供量化研究与数据展示参考，不构成任何投资建议或收益承诺。",
     ]
-    for item in method_items:
-        story.append(paragraph(f"• {item}", styles))
+    add_numbered_items(story, method_items, styles)
 
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
     return REPORT_PATH
