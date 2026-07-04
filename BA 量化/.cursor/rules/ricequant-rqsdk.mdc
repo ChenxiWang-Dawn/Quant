@@ -1,0 +1,17 @@
+---
+description: Ricequant SDK official documentation workflow
+globs: **/*.{py,ipynb,md}
+alwaysApply: true
+---
+
+This project uses Ricequant SDK for quantitative research and local development.
+
+Before editing or generating code that involves RQSDK, RQData, RQAlpha Plus, RQFactor, RQOptimizer, or RQPAttr:
+
+1. Read `AGENTS.md` and `CLAUDE.md`.
+2. Locate the relevant official documentation URL in `ricequant-doc-index.md` or `docs/document_index.md`.
+3. If no URL-reading tool is available, use `curl -L <official Ricequant documentation URL>`.
+4. Do not rely on generic web search or memory when official Ricequant docs are available.
+5. RQSDK is installed in the conda environment `quant`; use `/opt/miniconda3/envs/quant/bin/python` or `conda run -n quant python ...`.
+6. When API behavior is unclear, validate with a minimal terminal command after reading docs, such as `conda run -n quant python -c "import rqdatac; rqdatac.init(); help(rqdatac.get_price)"`.
+7. Never write credentials, license strings, tokens, or private research data into project files.
