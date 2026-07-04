@@ -1,0 +1,13 @@
+{
+  "python.defaultInterpreterPath": "/opt/miniconda3/envs/quant/bin/python",
+  "python.analysis.extraPaths": [
+    "~/.rqsdk/python",
+    "/opt/miniconda3/envs/quant/lib/python3.11/site-packages"
+  ],
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": false,
+    "markdown": true
+  },
+  "github.copilot.editor.enableAutoCompletions": true
+}

@@ -1,0 +1,33 @@
+{
+  "RQData Init": {
+    "prefix": "rqinit",
+    "body": [
+      "import rqdatac",
+      "",
+      "# 初始化 RQData",
+      "rqdatac.init()",
+      "",
+      "# 获取股票数据",
+      "data = rqdatac.get_price('${1:000001.XSHE}', start_date='${2:2023-01-01}', end_date='${3:2023-12-31}')",
+      "print(data.head())"
+    ],
+    "description": "初始化 RQData 并获取股票数据"
+  },
+  "RQAlpha Strategy": {
+    "prefix": "rqstrategy",
+    "body": [
+      "from rqalpha.api import *",
+      "",
+      "def init(context):",
+      "    context.s1 = '${1:000001.XSHE}'",
+      "    context.fired = False",
+      "    update_universe(context.s1)",
+      "",
+      "def handle_bar(context, bar_dict):",
+      "    if not context.fired:",
+      "        order_percent(context.s1, ${2:1})",
+      "        context.fired = True"
+    ],
+    "description": "创建基础的 RQAlpha Plus 策略模板"
+  }
+}
