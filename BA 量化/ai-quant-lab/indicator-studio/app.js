@@ -408,20 +408,23 @@
 
   async function loadData() {
     const source = el.dataSourceSelect.value;
+    el.symbolInput.value = normalizeSymbolInput(el.symbolInput.value);
     if (source === "sample") {
       loadGeneratedData();
       return;
     }
     try {
       setStatus(`正在通过 ${source} 获取真实行情...`);
-      const rows = await fetchRemoteCandles(source);
+      const result = await fetchRemoteCandles(source);
+      const rows = result.candles;
       if (!rows.length) throw new Error("数据源返回空行情");
       state.candles = rows;
-      state.symbol = el.symbolInput.value.trim();
-      state.sourceLabel = sourceLabel(source);
+      state.symbol = result.symbol || el.symbolInput.value.trim();
+      state.sourceLabel = sourceLabel(result.source || source);
+      el.symbolInput.value = state.symbol;
       resetView();
       updateTitles();
-      setStatus(`已通过 ${sourceLabel(source)} 加载 ${rows.length} 根K线`);
+      setStatus(`已通过 ${state.sourceLabel} 加载 ${rows.length} 根K线`);
     } catch (error) {
       loadGeneratedData();
       setStatus(`${sourceLabel(source)} 加载失败，已回退示例行情：${error.message}`);
@@ -431,7 +434,8 @@
   function loadGeneratedData() {
     const start = parseDate(el.startDate.value);
     const end = parseDate(el.endDate.value);
-    const symbol = el.symbolInput.value.trim() || "000001.XSHE";
+    const symbol = normalizeSymbolInput(el.symbolInput.value) || "000001.XSHE";
+    el.symbolInput.value = symbol;
     const daily = generateDailySeries(symbol, start, end);
     state.candles = el.frequencySelect.value === "1w" ? toWeekly(daily) : daily;
     state.symbol = symbol;
@@ -453,14 +457,33 @@
     const response = await fetch(`${backendBaseUrl()}/api/price?${params.toString()}`);
     const payload = await response.json();
     if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
-    return payload.candles.map((row) => ({
-      date: row.date,
-      open: Number(row.open),
-      high: Number(row.high),
-      low: Number(row.low),
-      close: Number(row.close),
-      volume: Number(row.volume || 0),
-    }));
+    return {
+      source: payload.source,
+      symbol: payload.symbol,
+      candles: payload.candles.map((row) => ({
+        date: row.date,
+        open: Number(row.open),
+        high: Number(row.high),
+        low: Number(row.low),
+        close: Number(row.close),
+        volume: Number(row.volume || 0),
+      })),
+    };
+  }
+
+  function normalizeSymbolInput(value) {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    const compact = raw.replace(/\.(SH|SZ|SS)$/i, "").replace(/\.(XSHG|XSHE|XBSE)$/i, "");
+    if (/^\d{6}$/.test(compact)) {
+      if (/^(60|68|90|51|52|56|58)/.test(compact)) return `${compact}.XSHG`;
+      if (/^(00|30|15|16|18|20)/.test(compact)) return `${compact}.XSHE`;
+      if (/^(43|83|87|88)/.test(compact)) return `${compact}.XBSE`;
+    }
+    if (/^\d{6}\.SH$/i.test(raw)) return raw.replace(/\.SH$/i, ".XSHG");
+    if (/^\d{6}\.SZ$/i.test(raw)) return raw.replace(/\.SZ$/i, ".XSHE");
+    if (/^\d{6}\.SS$/i.test(raw)) return raw.replace(/\.SS$/i, ".XSHG");
+    return raw;
   }
 
   function backendBaseUrl() {
@@ -470,6 +493,7 @@
   function sourceLabel(source) {
     return {
       sample: "示例行情",
+      auto: "自动选择",
       akshare: "AkShare",
       yfinance: "Yahoo Finance",
       rqdata: "RQData",
@@ -2117,15 +2141,13 @@ def handle_bar(context, bar_dict):
   }
 
   function renderColorFields(indicator, count) {
-    let html = "";
+    let html = `<label class="wide color-row-label"><span>颜色</span><div class="color-row">`;
     for (let i = 0; i < count; i += 1) {
       html += `
-        <label>颜色 ${i + 1}
-          <input type="color" data-color="${i}" value="${indicator.colors[i] || "#1f6feb"}" />
-        </label>
+        <input type="color" data-color="${i}" value="${indicator.colors[i] || "#1f6feb"}" title="颜色 ${i + 1}" />
       `;
     }
-    return html;
+    return `${html}</div></label>`;
   }
 
   function escapeAttr(value) {

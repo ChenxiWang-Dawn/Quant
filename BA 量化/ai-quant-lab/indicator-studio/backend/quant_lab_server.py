@@ -42,6 +42,7 @@ def provider_status():
 
 
 def normalize_symbol_for_yfinance(symbol):
+    symbol = normalize_order_book_id(symbol)
     if symbol.endswith(".XSHG"):
         return symbol.replace(".XSHG", ".SS")
     if symbol.endswith(".XSHE"):
@@ -49,7 +50,31 @@ def normalize_symbol_for_yfinance(symbol):
     return symbol
 
 
+def normalize_order_book_id(symbol):
+    raw = str(symbol or "").strip().upper()
+    compact = raw.split(".")[0]
+    if len(compact) == 6 and compact.isdigit():
+        if compact.startswith(("60", "68", "90", "51", "52", "56", "58")):
+            return compact + ".XSHG"
+        if compact.startswith(("00", "30", "15", "16", "18", "20")):
+            return compact + ".XSHE"
+        if compact.startswith(("43", "83", "87", "88")):
+            return compact + ".XBSE"
+    if raw.endswith(".SH"):
+        return compact + ".XSHG"
+    if raw.endswith(".SZ"):
+        return compact + ".XSHE"
+    if raw.endswith(".SS"):
+        return compact + ".XSHG"
+    return raw
+
+
+def is_a_share_symbol(symbol):
+    return normalize_order_book_id(symbol).endswith((".XSHG", ".XSHE", ".XBSE"))
+
+
 def normalize_symbol_for_tushare(symbol):
+    symbol = normalize_order_book_id(symbol)
     if symbol.endswith(".XSHG"):
         return symbol.replace(".XSHG", ".SH")
     if symbol.endswith(".XSHE"):
@@ -58,7 +83,7 @@ def normalize_symbol_for_tushare(symbol):
 
 
 def compact_symbol(symbol):
-    return symbol.split(".")[0]
+    return normalize_order_book_id(symbol).split(".")[0]
 
 
 def frame_to_candles(df):
@@ -158,7 +183,7 @@ def fetch_rqdata(symbol, start, end, frequency, adjust):
         raise RuntimeError("rqdatac is not installed")
     rqdatac.init()
     df = rqdatac.get_price(
-        symbol,
+        normalize_order_book_id(symbol),
         start_date=start,
         end_date=end,
         frequency=frequency,
@@ -187,6 +212,55 @@ def fetch_tushare(symbol, start, end, frequency, adjust):
         freq=freq,
     )
     return frame_to_candles(df)
+
+
+def source_order(source, symbol):
+    requested = (source or "auto").lower()
+    if is_a_share_symbol(symbol):
+        order = ["rqdata", "akshare", "yfinance", "tushare"]
+    else:
+        order = ["yfinance", "akshare", "rqdata", "tushare"]
+    if requested != "auto" and requested in order:
+        return [requested] + [item for item in order if item != requested]
+    return order
+
+
+def short_error(exc):
+    text = str(exc)
+    replacements = {
+        "this license is only allowed to access through the education network": "授权仅允许教育网访问",
+        "Too Many Requests. Rate limited. Try after a while.": "请求过多，被临时限流",
+        "Unable to connect to proxy": "代理连接失败",
+        "Remote end closed connection without response": "远端断开连接",
+        "tushare is not installed": "未安装 tushare",
+        "TUSHARE_TOKEN is not set": "未设置 TUSHARE_TOKEN",
+    }
+    for old, new in replacements.items():
+        if old in text:
+            return new
+    if "HTTPSConnectionPool" in text:
+        return "网络请求失败"
+    return text[:120]
+
+
+def fetch_with_fallback(source, symbol, start, end, frequency, adjust):
+    fetchers = {
+        "akshare": fetch_akshare,
+        "yfinance": fetch_yfinance,
+        "rqdata": fetch_rqdata,
+        "tushare": fetch_tushare,
+    }
+    normalized = normalize_order_book_id(symbol)
+    errors = []
+    for name in source_order(source, normalized):
+        try:
+            candles = fetchers[name](normalized, start, end, frequency, adjust)
+            if candles:
+                return name, normalized, candles
+            errors.append(f"{name}: empty data")
+        except Exception as exc:
+            errors.append(f"{name}: {short_error(exc)}")
+    raise RuntimeError("all data sources failed; " + " | ".join(errors))
 
 
 def local_backtest(candles, initial_cash):
@@ -278,16 +352,12 @@ class Handler(BaseHTTPRequestHandler):
                 end = params.get("end")
                 frequency = params.get("frequency", "1d")
                 adjust = params.get("adjust", "pre")
-                fetchers = {
-                    "akshare": fetch_akshare,
-                    "yfinance": fetch_yfinance,
-                    "rqdata": fetch_rqdata,
-                    "tushare": fetch_tushare,
-                }
-                if source not in fetchers:
-                    raise RuntimeError("unsupported source: " + source)
-                candles = fetchers[source](symbol, start, end, frequency, adjust)
-                self._send({"ok": True, "source": source, "symbol": symbol, "candles": candles})
+                used_source, normalized_symbol, candles = fetch_with_fallback(
+                    source, symbol, start, end, frequency, adjust
+                )
+                self._send(
+                    {"ok": True, "source": used_source, "symbol": normalized_symbol, "candles": candles}
+                )
                 return
             self._send({"error": "not found"}, 404)
         except Exception as exc:
