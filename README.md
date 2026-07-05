@@ -21,3 +21,16 @@
 - `strategies/`：策略研究
 - `mistakes/`：错误和踩坑记录
 - `resources/`：资料索引
+- `BA 量化/ai-quant-lab/`：量化工程学习辅助应用
+
+## AI Quant Lab
+
+`BA 量化/ai-quant-lab/indicator-studio/` 是一个本地静态量化研究工具，用于选择股票样例数据、导入 CSV、计算技术指标、调节参数、标注规则信号、查看简易策略表现，并对比多只股票的区间表现。
+
+打开方式：
+
+```text
+BA 量化/ai-quant-lab/indicator-studio/index.html
+```
+
+当前支持 MA、EMA、BOLL、MACD、RSI、KDJ、ATR、成交量均线、信号视图、对比视图、研究摘要和配置保存。

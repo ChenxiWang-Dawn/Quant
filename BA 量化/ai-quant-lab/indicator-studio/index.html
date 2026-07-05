@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Quant Lab - Indicator Studio</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">AQ</span>
+          <div>
+            <h1>AI Quant Lab</h1>
+            <p>Indicator Studio</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <label class="file-button" title="导入 date,open,high,low,close,volume 格式的 CSV">
+            <input id="csvInput" type="file" accept=".csv,text/csv" />
+            导入 CSV
+          </label>
+          <select id="presetSelect" class="compact-select" title="加载已保存配置">
+            <option value="">配置模板</option>
+          </select>
+          <button id="savePresetBtn" class="ghost-button">保存配置</button>
+          <button id="deletePresetBtn" class="ghost-button">删除配置</button>
+        </div>
+      </header>
+
+      <section class="data-toolbar" aria-label="数据选择">
+        <label>
+          股票
+          <select id="symbolSelect">
+            <option value="000001.XSHE">000001.XSHE 平安银行</option>
+            <option value="600519.XSHG">600519.XSHG 贵州茅台</option>
+            <option value="300750.XSHE">300750.XSHE 宁德时代</option>
+            <option value="002050.XSHE">002050.XSHE 三花智控</option>
+          </select>
+        </label>
+        <label>
+          开始
+          <input id="startDate" type="date" />
+        </label>
+        <label>
+          结束
+          <input id="endDate" type="date" />
+        </label>
+        <label>
+          周期
+          <select id="frequencySelect">
+            <option value="1d">日线</option>
+            <option value="1w">周线</option>
+          </select>
+        </label>
+        <label>
+          复权
+          <select id="adjustSelect">
+            <option value="pre">前复权</option>
+            <option value="none">不复权</option>
+          </select>
+        </label>
+        <button id="loadDataBtn" class="primary-button">加载数据</button>
+        <button id="resetViewBtn" class="ghost-button">重置视图</button>
+        <div class="template-group" aria-label="指标模板">
+          <button class="template-button" data-template="trend">趋势</button>
+          <button class="template-button" data-template="momentum">动量</button>
+          <button class="template-button" data-template="risk">波动</button>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <aside class="indicator-sidebar">
+          <div class="sidebar-head">
+            <div>
+              <h2>指标面板</h2>
+              <p>调节参数后实时重绘</p>
+            </div>
+            <label class="switch" title="关闭后需要手动点击应用参数">
+              <input id="autoRedraw" type="checkbox" checked />
+              <span></span>
+            </label>
+          </div>
+
+          <div class="add-row">
+            <select id="indicatorTypeSelect">
+              <option value="MA">MA 均线</option>
+              <option value="EMA">EMA 指数均线</option>
+              <option value="BOLL">BOLL 布林带</option>
+              <option value="MACD">MACD</option>
+              <option value="RSI">RSI</option>
+              <option value="KDJ">KDJ</option>
+              <option value="ATR">ATR</option>
+              <option value="VOLMA">成交量均线</option>
+            </select>
+            <button id="addIndicatorBtn" class="primary-button">添加</button>
+          </div>
+
+          <div id="indicatorList" class="indicator-list"></div>
+        </aside>
+
+        <section class="chart-panel">
+          <div class="chart-header">
+            <div>
+              <h2 id="chartTitle">000001.XSHE 平安银行</h2>
+              <p id="chartSubtitle">示例行情 · 日线 · 前复权</p>
+            </div>
+            <div class="chart-actions">
+              <button id="applyParamsBtn" class="primary-button hidden">应用参数</button>
+              <button id="exportConfigBtn" class="ghost-button">导出配置</button>
+            </div>
+          </div>
+          <div id="metricStrip" class="metric-strip"></div>
+          <nav class="mode-tabs" aria-label="研究视图">
+            <button class="mode-tab active" data-mode="chart">图表</button>
+            <button class="mode-tab" data-mode="signals">信号</button>
+            <button class="mode-tab" data-mode="compare">对比</button>
+            <button class="mode-tab" data-mode="research">研究</button>
+          </nav>
+          <section id="signalsPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                信号风格
+                <select id="signalProfile">
+                  <option value="balanced">均衡确认</option>
+                  <option value="trend">趋势优先</option>
+                  <option value="momentum">动量反转</option>
+                </select>
+              </label>
+              <label>
+                RSI 低位
+                <input id="rsiLow" type="number" min="1" max="50" value="30" />
+              </label>
+              <label>
+                RSI 高位
+                <input id="rsiHigh" type="number" min="50" max="99" value="70" />
+              </label>
+              <label>
+                手续费 bp
+                <input id="feeBps" type="number" min="0" step="1" value="8" />
+              </label>
+            </div>
+            <div id="signalSummary" class="summary-grid"></div>
+          </section>
+          <section id="comparePanel" class="mode-panel hidden">
+            <div id="compareSymbols" class="compare-symbols"></div>
+            <div id="compareSummary" class="summary-grid"></div>
+          </section>
+          <section id="researchPanel" class="mode-panel hidden">
+            <div id="researchBrief" class="research-brief"></div>
+          </section>
+          <div class="canvas-wrap">
+            <canvas id="priceCanvas"></canvas>
+            <div id="tooltip" class="tooltip hidden"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <span id="statusText">准备就绪</span>
+        <span id="cursorText">移动鼠标查看 K 线详情</span>
+      </footer>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
