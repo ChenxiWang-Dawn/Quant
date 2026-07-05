@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -29,6 +30,7 @@ def optional_import(name):
 
 
 pd = optional_import("pandas")
+requests = optional_import("requests")
 
 
 def provider_status():
@@ -84,6 +86,136 @@ def normalize_symbol_for_tushare(symbol):
 
 def compact_symbol(symbol):
     return normalize_order_book_id(symbol).split(".")[0]
+
+
+def eastmoney_secid(symbol):
+    normalized = normalize_order_book_id(symbol)
+    code = normalized.split(".")[0]
+    if normalized.endswith(".XSHG"):
+        return "1." + code
+    return "0." + code
+
+
+def fetch_eastmoney(symbol, start, end, frequency, adjust):
+    if requests is None:
+        raise RuntimeError("requests is not installed")
+    klt = "102" if frequency == "1w" else "101"
+    fqt = "1" if adjust == "pre" else "0"
+    params = {
+        "secid": eastmoney_secid(symbol),
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116",
+        "ut": "7eea3edcaed734bea9cbfc24409ed989",
+        "klt": klt,
+        "fqt": fqt,
+        "beg": start.replace("-", ""),
+        "end": end.replace("-", ""),
+    }
+    response = requests.get(
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get",
+        params=params,
+        timeout=12,
+        proxies={"http": None, "https": None},
+    )
+    response.raise_for_status()
+    payload = response.json()
+    data = payload.get("data") or {}
+    klines = data.get("klines") or []
+    rows = []
+    for item in klines:
+        parts = item.split(",")
+        if len(parts) < 6:
+            continue
+        rows.append(
+            {
+                "date": parts[0],
+                "open": float(parts[1]),
+                "close": float(parts[2]),
+                "high": float(parts[3]),
+                "low": float(parts[4]),
+                "volume": float(parts[5]),
+            }
+        )
+    return data.get("name") or "", rows
+
+
+def sina_symbol(symbol):
+    normalized = normalize_order_book_id(symbol)
+    code = normalized.split(".")[0]
+    if normalized.endswith(".XSHG"):
+        return "sh" + code
+    return "sz" + code
+
+
+def fetch_sina(symbol, start, end, frequency, adjust):
+    if requests is None:
+        raise RuntimeError("requests is not installed")
+    callback = "var _k="
+    response = requests.get(
+        "https://quotes.sina.cn/cn/api/jsonp_v2.php/" + callback + "/CN_MarketDataService.getKLineData",
+        params={"symbol": sina_symbol(symbol), "scale": "240", "ma": "no", "datalen": "1200"},
+        timeout=12,
+        proxies={"http": "", "https": ""},
+        headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"},
+    )
+    response.raise_for_status()
+    match = re.search(r"=\((\[.*\])\)", response.text, re.S)
+    if not match:
+        raise RuntimeError("新浪财经返回格式无法解析")
+    items = json.loads(match.group(1))
+    rows = []
+    for item in items:
+        date = item.get("day")
+        if not date or date < start or date > end:
+            continue
+        rows.append(
+            {
+                "date": date,
+                "open": float(item["open"]),
+                "high": float(item["high"]),
+                "low": float(item["low"]),
+                "close": float(item["close"]),
+                "volume": float(item.get("volume") or 0),
+            }
+        )
+    rows.sort(key=lambda row: row["date"])
+    if frequency == "1w" and rows:
+        frame = pd.DataFrame(rows)
+        frame["date"] = pd.to_datetime(frame["date"])
+        frame = frame.set_index("date")
+        weekly = (
+            frame.resample("W-FRI")
+            .agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"})
+            .dropna()
+        )
+        weekly = weekly.reset_index()
+        rows = [
+            {
+                "date": row["date"].strftime("%Y-%m-%d"),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+            }
+            for _, row in weekly.iterrows()
+        ]
+    return fetch_sina_name(symbol), rows
+
+
+def fetch_sina_name(symbol):
+    try:
+        response = requests.get(
+            "https://hq.sinajs.cn/list=" + sina_symbol(symbol),
+            timeout=8,
+            proxies={"http": "", "https": ""},
+            headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.sina.com.cn/"},
+        )
+        response.encoding = "gb18030"
+        match = re.search(r'="([^,"]+),', response.text)
+        return match.group(1) if match else ""
+    except Exception:
+        return ""
 
 
 def frame_to_candles(df):
@@ -152,6 +284,12 @@ def frame_to_candles(df):
 
 
 def fetch_akshare(symbol, start, end, frequency, adjust):
+    try:
+        name, rows = fetch_eastmoney(symbol, start, end, frequency, adjust)
+        if rows:
+            return name, rows
+    except Exception:
+        pass
     ak = optional_import("akshare")
     if ak is None:
         raise RuntimeError("akshare is not installed")
@@ -164,7 +302,7 @@ def fetch_akshare(symbol, start, end, frequency, adjust):
         end_date=end.replace("-", ""),
         adjust=adjust_name,
     )
-    return frame_to_candles(df)
+    return "", frame_to_candles(df)
 
 
 def fetch_yfinance(symbol, start, end, frequency, adjust):
@@ -174,7 +312,7 @@ def fetch_yfinance(symbol, start, end, frequency, adjust):
     interval = "1wk" if frequency == "1w" else "1d"
     ticker = yf.Ticker(normalize_symbol_for_yfinance(symbol))
     df = ticker.history(start=start, end=end, interval=interval, auto_adjust=adjust == "pre")
-    return frame_to_candles(df)
+    return "", frame_to_candles(df)
 
 
 def fetch_rqdata(symbol, start, end, frequency, adjust):
@@ -191,7 +329,7 @@ def fetch_rqdata(symbol, start, end, frequency, adjust):
         adjust_type="pre" if adjust == "pre" else "none",
         expect_df=True,
     )
-    return frame_to_candles(df)
+    return "", frame_to_candles(df)
 
 
 def fetch_tushare(symbol, start, end, frequency, adjust):
@@ -211,15 +349,15 @@ def fetch_tushare(symbol, start, end, frequency, adjust):
         adj=adj,
         freq=freq,
     )
-    return frame_to_candles(df)
+    return "", frame_to_candles(df)
 
 
 def source_order(source, symbol):
     requested = (source or "auto").lower()
     if is_a_share_symbol(symbol):
-        order = ["rqdata", "akshare", "yfinance", "tushare"]
+        order = ["rqdata", "akshare", "sina", "yfinance", "tushare"]
     else:
-        order = ["yfinance", "akshare", "rqdata", "tushare"]
+        order = ["yfinance", "akshare", "sina", "rqdata", "tushare"]
     if requested != "auto" and requested in order:
         return [requested] + [item for item in order if item != requested]
     return order
@@ -246,6 +384,7 @@ def short_error(exc):
 def fetch_with_fallback(source, symbol, start, end, frequency, adjust):
     fetchers = {
         "akshare": fetch_akshare,
+        "sina": fetch_sina,
         "yfinance": fetch_yfinance,
         "rqdata": fetch_rqdata,
         "tushare": fetch_tushare,
@@ -254,9 +393,9 @@ def fetch_with_fallback(source, symbol, start, end, frequency, adjust):
     errors = []
     for name in source_order(source, normalized):
         try:
-            candles = fetchers[name](normalized, start, end, frequency, adjust)
+            security_name, candles = fetchers[name](normalized, start, end, frequency, adjust)
             if candles:
-                return name, normalized, candles
+                return name, normalized, security_name, candles
             errors.append(f"{name}: empty data")
         except Exception as exc:
             errors.append(f"{name}: {short_error(exc)}")
@@ -352,11 +491,17 @@ class Handler(BaseHTTPRequestHandler):
                 end = params.get("end")
                 frequency = params.get("frequency", "1d")
                 adjust = params.get("adjust", "pre")
-                used_source, normalized_symbol, candles = fetch_with_fallback(
+                used_source, normalized_symbol, security_name, candles = fetch_with_fallback(
                     source, symbol, start, end, frequency, adjust
                 )
                 self._send(
-                    {"ok": True, "source": used_source, "symbol": normalized_symbol, "candles": candles}
+                    {
+                        "ok": True,
+                        "source": used_source,
+                        "symbol": normalized_symbol,
+                        "name": security_name,
+                        "candles": candles,
+                    }
                 )
                 return
             self._send({"error": "not found"}, 404)

@@ -248,6 +248,7 @@
   const state = {
     candles: [],
     symbol: "000001.XSHE",
+    securityName: "",
     sourceLabel: "示例行情",
     indicators: clone(DEFAULT_INDICATORS),
     computed: {},
@@ -409,6 +410,7 @@
   async function loadData() {
     const source = el.dataSourceSelect.value;
     el.symbolInput.value = normalizeSymbolInput(el.symbolInput.value);
+    clampEndDateToToday();
     if (source === "sample") {
       loadGeneratedData();
       return;
@@ -420,18 +422,19 @@
       if (!rows.length) throw new Error("数据源返回空行情");
       state.candles = rows;
       state.symbol = result.symbol || el.symbolInput.value.trim();
+      state.securityName = result.name || "";
       state.sourceLabel = sourceLabel(result.source || source);
       el.symbolInput.value = state.symbol;
       resetView();
       updateTitles();
       setStatus(`已通过 ${state.sourceLabel} 加载 ${rows.length} 根K线`);
     } catch (error) {
-      loadGeneratedData();
-      setStatus(`${sourceLabel(source)} 加载失败，已回退示例行情：${error.message}`);
+      setStatus(`${sourceLabel(source)} 加载失败，未更新图表：${error.message}`);
     }
   }
 
   function loadGeneratedData() {
+    clampEndDateToToday();
     const start = parseDate(el.startDate.value);
     const end = parseDate(el.endDate.value);
     const symbol = normalizeSymbolInput(el.symbolInput.value) || "000001.XSHE";
@@ -439,6 +442,7 @@
     const daily = generateDailySeries(symbol, start, end);
     state.candles = el.frequencySelect.value === "1w" ? toWeekly(daily) : daily;
     state.symbol = symbol;
+    state.securityName = STOCKS[symbol]?.name || "";
     state.sourceLabel = "示例行情";
     resetView();
     updateTitles();
@@ -460,6 +464,7 @@
     return {
       source: payload.source,
       symbol: payload.symbol,
+      name: payload.name,
       candles: payload.candles.map((row) => ({
         date: row.date,
         open: Number(row.open),
@@ -486,6 +491,13 @@
     return raw;
   }
 
+  function clampEndDateToToday() {
+    const today = formatDate(new Date());
+    if (el.endDate.value > today) {
+      el.endDate.value = today;
+    }
+  }
+
   function backendBaseUrl() {
     return el.backendUrlInput.value.replace(/\/+$/, "");
   }
@@ -495,6 +507,7 @@
       sample: "示例行情",
       auto: "自动选择",
       akshare: "AkShare",
+      sina: "新浪财经",
       yfinance: "Yahoo Finance",
       rqdata: "RQData",
       tushare: "Tushare",
@@ -507,7 +520,7 @@
 
   function updateTitles() {
     const meta = STOCKS[state.symbol];
-    const name = meta ? meta.name : "自定义标的";
+    const name = state.securityName || (meta ? meta.name : "自定义标的");
     el.chartTitle.textContent = `${state.symbol} ${name}`;
     const freq = el.frequencySelect.value === "1w" ? "周线" : "日线";
     const adjust = el.adjustSelect.value === "pre" ? "前复权" : "不复权";
