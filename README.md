@@ -33,7 +33,7 @@
 BA 量化/ai-quant-lab/indicator-studio/index.html
 ```
 
-当前支持 MA、EMA、BOLL、MACD、RSI、KDJ、ATR、成交量均线、信号视图、对比视图、研究摘要和配置保存。
+当前支持 MA、EMA、BOLL、MACD、RSI、KDJ、ATR、成交量均线、信号视图、对比视图、参数优化视图、研究摘要、配置保存、配置导入导出、分享链接和 CSV 下载。
 
 在线访问：
 

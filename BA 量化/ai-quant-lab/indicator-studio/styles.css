@@ -598,6 +598,72 @@ input[type="color"] {
   border-color: #bfdbfe;
 }
 
+.table-shell {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  margin-top: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+th,
+td {
+  border-bottom: 1px solid var(--border);
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 650;
+}
+
+tbody tr:hover {
+  background: #f8fafc;
+}
+
+td.numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.badge {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.badge.buy {
+  background: var(--danger-soft);
+  color: var(--up);
+}
+
+.badge.sell {
+  background: var(--success-soft);
+  color: var(--down);
+}
+
+.badge.neutral {
+  background: var(--blue-soft);
+  color: var(--primary);
+}
+
 .canvas-wrap {
   position: relative;
   height: clamp(520px, calc(100vh - 218px), 780px);

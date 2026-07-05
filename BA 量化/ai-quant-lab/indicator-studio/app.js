@@ -156,6 +156,7 @@
     loadDataBtn: document.querySelector("#loadDataBtn"),
     resetViewBtn: document.querySelector("#resetViewBtn"),
     csvInput: document.querySelector("#csvInput"),
+    configInput: document.querySelector("#configInput"),
     indicatorTypeSelect: document.querySelector("#indicatorTypeSelect"),
     addIndicatorBtn: document.querySelector("#addIndicatorBtn"),
     indicatorList: document.querySelector("#indicatorList"),
@@ -165,6 +166,8 @@
     deletePresetBtn: document.querySelector("#deletePresetBtn"),
     presetSelect: document.querySelector("#presetSelect"),
     exportConfigBtn: document.querySelector("#exportConfigBtn"),
+    shareConfigBtn: document.querySelector("#shareConfigBtn"),
+    downloadCsvBtn: document.querySelector("#downloadCsvBtn"),
     chartTitle: document.querySelector("#chartTitle"),
     chartSubtitle: document.querySelector("#chartSubtitle"),
     statusText: document.querySelector("#statusText"),
@@ -173,14 +176,24 @@
     modeTabs: document.querySelectorAll(".mode-tab"),
     signalsPanel: document.querySelector("#signalsPanel"),
     comparePanel: document.querySelector("#comparePanel"),
+    optimizePanel: document.querySelector("#optimizePanel"),
     researchPanel: document.querySelector("#researchPanel"),
     signalProfile: document.querySelector("#signalProfile"),
     rsiLow: document.querySelector("#rsiLow"),
     rsiHigh: document.querySelector("#rsiHigh"),
     feeBps: document.querySelector("#feeBps"),
     signalSummary: document.querySelector("#signalSummary"),
+    tradeLedger: document.querySelector("#tradeLedger"),
     compareSymbols: document.querySelector("#compareSymbols"),
     compareSummary: document.querySelector("#compareSummary"),
+    optFastStart: document.querySelector("#optFastStart"),
+    optFastEnd: document.querySelector("#optFastEnd"),
+    optSlowStart: document.querySelector("#optSlowStart"),
+    optSlowEnd: document.querySelector("#optSlowEnd"),
+    optStep: document.querySelector("#optStep"),
+    runOptimizeBtn: document.querySelector("#runOptimizeBtn"),
+    optimizeSummary: document.querySelector("#optimizeSummary"),
+    optimizeTable: document.querySelector("#optimizeTable"),
     researchBrief: document.querySelector("#researchBrief"),
     templateButtons: document.querySelectorAll(".template-button"),
   };
@@ -197,6 +210,7 @@
     signals: { events: [], strategy: {}, equity: [] },
     compareSymbols: ["000001.XSHE", "600519.XSHG", "300750.XSHE"],
     compareData: [],
+    optimization: { results: [], best: null },
     research: [],
     visibleStart: 0,
     visibleEnd: 0,
@@ -592,10 +606,13 @@
     state.stats = calcStats(state.candles);
     state.signals = calcSignalsAndStrategy();
     state.compareData = calcCompareData();
+    state.optimization = calcOptimizationGrid();
     state.research = buildResearchBrief();
     renderMetricStrip();
     renderSignalSummary();
+    renderTradeLedger();
     renderCompareSummary();
+    renderOptimizeSummary();
     renderResearchBrief();
   }
 
@@ -823,6 +840,70 @@
     });
   }
 
+  function calcOptimizationGrid() {
+    const fastStart = cleanPeriod(el.optFastStart.value, 3);
+    const fastEnd = cleanPeriod(el.optFastEnd.value, 18);
+    const slowStart = cleanPeriod(el.optSlowStart.value, 20);
+    const slowEnd = cleanPeriod(el.optSlowEnd.value, 80);
+    const step = clamp(cleanPeriod(el.optStep.value, 5), 1, 20);
+    const fastMin = Math.min(fastStart, fastEnd);
+    const fastMax = Math.max(fastStart, fastEnd);
+    const slowMin = Math.min(slowStart, slowEnd);
+    const slowMax = Math.max(slowStart, slowEnd);
+    const results = [];
+
+    for (let fast = fastMin; fast <= fastMax; fast += step) {
+      for (let slow = slowMin; slow <= slowMax; slow += step) {
+        if (fast >= slow) continue;
+        results.push(simulateMaStrategy(fast, slow));
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    return {
+      results,
+      best: results[0] || null,
+      ranges: { fastMin, fastMax, slowMin, slowMax, step },
+    };
+  }
+
+  function simulateMaStrategy(fast, slow) {
+    const closes = valuesOf("close");
+    const fastLine = sma(closes, fast);
+    const slowLine = sma(closes, slow);
+    const fee = (Number(el.feeBps.value) || 0) / 10000;
+    let cash = 100000;
+    let shares = 0;
+    let trades = 0;
+    const equity = [];
+
+    for (let i = 0; i < state.candles.length; i += 1) {
+      if (i > 0 && crossUp(fastLine, slowLine, i) && shares === 0) {
+        shares = (cash * (1 - fee)) / closes[i];
+        cash = 0;
+        trades += 1;
+      }
+      if (i > 0 && crossDown(fastLine, slowLine, i) && shares > 0) {
+        cash = shares * closes[i] * (1 - fee);
+        shares = 0;
+      }
+      equity.push(cash + shares * closes[i]);
+    }
+
+    const totalReturn = equity.length ? equity[equity.length - 1] / equity[0] - 1 : 0;
+    const drawdown = maxDrawdown(equity);
+    const score = totalReturn + drawdown * 0.65 - Math.max(0, trades - 18) * 0.002;
+    return {
+      fast,
+      slow,
+      totalReturn,
+      maxDd: drawdown,
+      trades,
+      score,
+      equity,
+    };
+  }
+
   function compareColor(symbol) {
     const palette = {
       "000001.XSHE": "#1f6feb",
@@ -863,7 +944,11 @@
     const signal = state.signals.events.length
       ? ["info", "最近信号", `${state.signals.events.at(-1).date} 出现${state.signals.events.at(-1).type === "buy" ? "买入" : "卖出"}信号：${state.signals.events.at(-1).reasons.join("、")}。`]
       : ["info", "最近信号", "当前规则组合在样本内暂无确认信号。"];
-    return [trend, momentum, risk, signal];
+    const best = state.optimization.best;
+    const optimize = best
+      ? ["info", "参数扫描", `当前 MA 扫描中表现较好的组合是 Fast ${best.fast} / Slow ${best.slow}，综合评分 ${best.score.toFixed(3)}。`]
+      : ["info", "参数扫描", "样本长度不足或参数范围无有效组合，暂未形成优化结果。"];
+    return [trend, momentum, risk, signal, optimize];
   }
 
   function renderMetricStrip() {
@@ -896,9 +981,62 @@
     ].join("");
   }
 
+  function renderTradeLedger() {
+    const events = state.signals.events.slice(-18).reverse();
+    if (!events.length) {
+      el.tradeLedger.innerHTML = `<tr><td colspan="5">暂无确认信号</td></tr>`;
+      return;
+    }
+    el.tradeLedger.innerHTML = events
+      .map(
+        (event) => `
+          <tr>
+            <td>${event.date}</td>
+            <td><span class="badge ${event.type}">${event.type === "buy" ? "买入" : "卖出"}</span></td>
+            <td class="numeric">${fmt.format(event.price)}</td>
+            <td class="numeric">${event.score}</td>
+            <td>${event.reasons.join("、")}</td>
+          </tr>
+        `
+      )
+      .join("");
+  }
+
   function renderCompareSummary() {
     el.compareSummary.innerHTML = state.compareData
       .map((item) => summaryItem(`${item.symbol}`, formatPercent(item.returnValue), item.name, item.returnValue))
+      .join("");
+  }
+
+  function renderOptimizeSummary() {
+    const { results, best } = state.optimization;
+    if (!best) {
+      el.optimizeSummary.innerHTML = summaryItem("优化状态", "暂无结果", "请调整参数范围后运行");
+      el.optimizeTable.innerHTML = `<tr><td colspan="7">暂无有效参数组合</td></tr>`;
+      return;
+    }
+    const median = results[Math.floor(results.length / 2)];
+    el.optimizeSummary.innerHTML = [
+      summaryItem("最佳组合", `${best.fast} / ${best.slow}`, `Fast / Slow，样本 ${state.candles.length} 根K线`),
+      summaryItem("最佳收益", formatPercent(best.totalReturn), `回撤 ${formatPercent(best.maxDd)}`, best.totalReturn),
+      summaryItem("参数数量", `${results.length}`, `中位评分 ${median ? median.score.toFixed(3) : "--"}`),
+      summaryItem("交易次数", `${best.trades}`, "MA 金叉买入，死叉卖出"),
+    ].join("");
+    el.optimizeTable.innerHTML = results
+      .slice(0, 12)
+      .map(
+        (item, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="numeric">${item.fast}</td>
+            <td class="numeric">${item.slow}</td>
+            <td class="numeric">${formatPercent(item.totalReturn)}</td>
+            <td class="numeric">${formatPercent(item.maxDd)}</td>
+            <td class="numeric">${item.trades}</td>
+            <td class="numeric">${item.score.toFixed(3)}</td>
+          </tr>
+        `
+      )
       .join("");
   }
 
@@ -951,6 +1089,11 @@
 
     if (state.mode === "compare") {
       drawCompareCanvas(width, height);
+      return;
+    }
+
+    if (state.mode === "optimize") {
+      drawOptimizationCanvas(width, height);
       return;
     }
 
@@ -1197,6 +1340,77 @@
       const index = Math.round((dates.length - 1) * (i / Math.max(1, ticks - 1)));
       ctx.fillText(dates[index].date.slice(5), toX(index, dates.length), panel.y + panel.h + 12);
     }
+  }
+
+  function drawOptimizationCanvas(width, height) {
+    const panel = { x: 72, y: 26, w: width - 112, h: height - 90 };
+    const results = state.optimization.results || [];
+    if (!results.length) {
+      drawEmpty(width, height, "暂无优化结果");
+      return;
+    }
+
+    drawSinglePanelGrid(panel);
+    const fastValues = [...new Set(results.map((item) => item.fast))].sort((a, b) => a - b);
+    const slowValues = [...new Set(results.map((item) => item.slow))].sort((a, b) => a - b);
+    const scoreValues = results.map((item) => item.score);
+    const minScore = Math.min(...scoreValues);
+    const maxScore = Math.max(...scoreValues);
+    const cellW = panel.w / Math.max(1, slowValues.length);
+    const cellH = panel.h / Math.max(1, fastValues.length);
+    const byKey = new Map(results.map((item) => [`${item.fast}:${item.slow}`, item]));
+
+    fastValues.forEach((fast, row) => {
+      slowValues.forEach((slow, col) => {
+        const item = byKey.get(`${fast}:${slow}`);
+        if (!item) return;
+        const ratio = (item.score - minScore) / (maxScore - minScore || 1);
+        ctx.fillStyle = heatColor(ratio);
+        ctx.fillRect(panel.x + col * cellW, panel.y + row * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      });
+    });
+
+    const best = state.optimization.best;
+    if (best) {
+      const bestCol = slowValues.indexOf(best.slow);
+      const bestRow = fastValues.indexOf(best.fast);
+      ctx.strokeStyle = "#17212b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(panel.x + bestCol * cellW + 1, panel.y + bestRow * cellH + 1, cellW - 2, cellH - 2);
+    }
+
+    ctx.fillStyle = "#16212e";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("MA 参数评分热力图", panel.x, panel.y - 18);
+    ctx.fillStyle = "#687386";
+    ctx.textAlign = "center";
+    slowValues.forEach((slow, col) => {
+      if (col % Math.max(1, Math.ceil(slowValues.length / 8)) === 0) {
+        ctx.fillText(String(slow), panel.x + col * cellW + cellW / 2, panel.y + panel.h + 12);
+      }
+    });
+    ctx.textAlign = "right";
+    fastValues.forEach((fast, row) => {
+      if (row % Math.max(1, Math.ceil(fastValues.length / 8)) === 0) {
+        ctx.fillText(String(fast), panel.x - 8, panel.y + row * cellH + cellH / 2 - 6);
+      }
+    });
+    ctx.textAlign = "left";
+    ctx.fillText("Slow", panel.x + panel.w - 30, panel.y + panel.h + 32);
+    ctx.save();
+    ctx.translate(panel.x - 48, panel.y + 22);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Fast", 0, 0);
+    ctx.restore();
+  }
+
+  function heatColor(ratio) {
+    const r = Math.round(31 + ratio * 186);
+    const g = Math.round(157 - ratio * 83);
+    const b = Math.round(114 - ratio * 56);
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   function drawSinglePanelGrid(panel) {
@@ -1472,6 +1686,7 @@
     });
     el.signalsPanel.classList.toggle("hidden", mode !== "signals");
     el.comparePanel.classList.toggle("hidden", mode !== "compare");
+    el.optimizePanel.classList.toggle("hidden", mode !== "optimize");
     el.researchPanel.classList.toggle("hidden", mode !== "research");
     el.tooltip.classList.add("hidden");
     draw();
@@ -1662,6 +1877,13 @@
         rsiHigh: el.rsiHigh.value,
         feeBps: el.feeBps.value,
       },
+      optimize: {
+        fastStart: el.optFastStart.value,
+        fastEnd: el.optFastEnd.value,
+        slowStart: el.optSlowStart.value,
+        slowEnd: el.optSlowEnd.value,
+        step: el.optStep.value,
+      },
       compareSymbols: state.compareSymbols,
       indicators: state.indicators,
     };
@@ -1678,6 +1900,13 @@
       if (config.signal.rsiLow) el.rsiLow.value = config.signal.rsiLow;
       if (config.signal.rsiHigh) el.rsiHigh.value = config.signal.rsiHigh;
       if (config.signal.feeBps) el.feeBps.value = config.signal.feeBps;
+    }
+    if (config.optimize) {
+      if (config.optimize.fastStart) el.optFastStart.value = config.optimize.fastStart;
+      if (config.optimize.fastEnd) el.optFastEnd.value = config.optimize.fastEnd;
+      if (config.optimize.slowStart) el.optSlowStart.value = config.optimize.slowStart;
+      if (config.optimize.slowEnd) el.optSlowEnd.value = config.optimize.slowEnd;
+      if (config.optimize.step) el.optStep.value = config.optimize.step;
     }
     if (Array.isArray(config.compareSymbols)) state.compareSymbols = config.compareSymbols;
     if (Array.isArray(config.indicators)) state.indicators = clone(config.indicators);
@@ -1780,7 +2009,91 @@
     reader.readAsText(file);
   }
 
+  function handleConfigFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const config = JSON.parse(String(reader.result || "{}"));
+        applyConfig(config);
+        setStatus(`已导入配置：${file.name}`);
+      } catch (error) {
+        setStatus(`配置导入失败：${error.message}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function downloadTextFile(filename, text, type = "text/plain") {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadCurrentCsv() {
+    const header = "date,open,high,low,close,volume";
+    const rows = state.candles.map((row) =>
+      [row.date, row.open, row.high, row.low, row.close, row.volume].join(",")
+    );
+    const filename = `${state.symbol || "indicator-studio"}-${el.frequencySelect.value}.csv`;
+    downloadTextFile(filename, [header, ...rows].join("\n"), "text/csv");
+    setStatus(`已下载 CSV：${filename}`);
+  }
+
+  function encodeConfig(config) {
+    const json = JSON.stringify(config);
+    const bytes = new TextEncoder().encode(json);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+  }
+
+  function decodeConfig(payload) {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  async function shareConfigLink() {
+    const url = new URL(window.location.href);
+    url.hash = `config=${encodeConfig(getConfig())}`;
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setStatus("分享链接已复制到剪贴板");
+    } catch {
+      window.prompt("复制分享链接", url.toString());
+    }
+  }
+
+  function loadConfigFromHash() {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash.startsWith("config=")) return false;
+    try {
+      const config = decodeConfig(hash.slice("config=".length));
+      applyConfig(config);
+      setStatus("已从分享链接恢复研究配置");
+      return true;
+    } catch {
+      setStatus("分享链接中的配置无法解析");
+      return false;
+    }
+  }
+
   function updateHover(event) {
+    if (state.mode === "compare" || state.mode === "optimize") {
+      clearHover();
+      return;
+    }
     const rect = el.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -1858,6 +2171,14 @@
     [el.signalProfile, el.rsiLow, el.rsiHigh, el.feeBps].forEach((input) => {
       input.addEventListener("input", recomputeAndDraw);
     });
+    [el.optFastStart, el.optFastEnd, el.optSlowStart, el.optSlowEnd, el.optStep].forEach((input) => {
+      input.addEventListener("input", recomputeAndDraw);
+    });
+    el.runOptimizeBtn.addEventListener("click", () => {
+      updateAnalytics();
+      setMode("optimize");
+      setStatus("参数优化已完成");
+    });
     el.compareSymbols.addEventListener("change", () => {
       state.compareSymbols = Array.from(el.compareSymbols.querySelectorAll("input:checked")).map((input) => input.value);
       updateAnalytics();
@@ -1871,6 +2192,10 @@
     el.csvInput.addEventListener("change", (event) => {
       const [file] = event.target.files;
       if (file) handleCsv(file);
+    });
+    el.configInput.addEventListener("change", (event) => {
+      const [file] = event.target.files;
+      if (file) handleConfigFile(file);
     });
     el.savePresetBtn.addEventListener("click", () => {
       const name = window.prompt("请输入配置名称", el.presetSelect.value || "默认指标模板");
@@ -1900,13 +2225,16 @@
     });
     el.exportConfigBtn.addEventListener("click", async () => {
       const json = JSON.stringify(getConfig(), null, 2);
+      downloadTextFile(`indicator-studio-config-${formatDate(new Date())}.json`, json, "application/json");
       try {
         await navigator.clipboard.writeText(json);
-        setStatus("当前配置 JSON 已复制到剪贴板");
+        setStatus("当前配置 JSON 已下载并复制到剪贴板");
       } catch {
-        window.alert(json);
+        setStatus("当前配置 JSON 已下载");
       }
     });
+    el.shareConfigBtn.addEventListener("click", shareConfigLink);
+    el.downloadCsvBtn.addEventListener("click", downloadCurrentCsv);
     el.canvas.addEventListener("mousemove", updateHover);
     el.canvas.addEventListener("mouseleave", clearHover);
     el.canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -1927,6 +2255,7 @@
     refreshPresetSelect();
     bindEvents();
     loadGeneratedData();
+    loadConfigFromHash();
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(el.canvas.parentElement);
   }

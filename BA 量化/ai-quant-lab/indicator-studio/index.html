@@ -22,11 +22,17 @@
             <input id="csvInput" type="file" accept=".csv,text/csv" />
             导入 CSV
           </label>
+          <label class="file-button" title="导入之前导出的研究配置 JSON">
+            <input id="configInput" type="file" accept=".json,application/json" />
+            导入配置
+          </label>
           <select id="presetSelect" class="compact-select" title="加载已保存配置">
             <option value="">配置模板</option>
           </select>
           <button id="savePresetBtn" class="ghost-button">保存配置</button>
           <button id="deletePresetBtn" class="ghost-button">删除配置</button>
+          <button id="shareConfigBtn" class="ghost-button">分享链接</button>
+          <button id="downloadCsvBtn" class="ghost-button">下载 CSV</button>
         </div>
       </header>
 
@@ -117,6 +123,7 @@
             <button class="mode-tab active" data-mode="chart">图表</button>
             <button class="mode-tab" data-mode="signals">信号</button>
             <button class="mode-tab" data-mode="compare">对比</button>
+            <button class="mode-tab" data-mode="optimize">优化</button>
             <button class="mode-tab" data-mode="research">研究</button>
           </nav>
           <section id="signalsPanel" class="mode-panel hidden">
@@ -143,10 +150,66 @@
               </label>
             </div>
             <div id="signalSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>方向</th>
+                    <th>价格</th>
+                    <th>强度</th>
+                    <th>原因</th>
+                  </tr>
+                </thead>
+                <tbody id="tradeLedger"></tbody>
+              </table>
+            </div>
           </section>
           <section id="comparePanel" class="mode-panel hidden">
             <div id="compareSymbols" class="compare-symbols"></div>
             <div id="compareSummary" class="summary-grid"></div>
+          </section>
+          <section id="optimizePanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                Fast 起点
+                <input id="optFastStart" type="number" min="2" max="60" value="3" />
+              </label>
+              <label>
+                Fast 终点
+                <input id="optFastEnd" type="number" min="3" max="80" value="18" />
+              </label>
+              <label>
+                Slow 起点
+                <input id="optSlowStart" type="number" min="5" max="120" value="20" />
+              </label>
+              <label>
+                Slow 终点
+                <input id="optSlowEnd" type="number" min="8" max="180" value="80" />
+              </label>
+              <label>
+                步长
+                <input id="optStep" type="number" min="1" max="20" value="5" />
+              </label>
+              <button id="runOptimizeBtn" class="primary-button">运行优化</button>
+            </div>
+            <div id="optimizeSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>排名</th>
+                    <th>Fast</th>
+                    <th>Slow</th>
+                    <th>收益</th>
+                    <th>回撤</th>
+                    <th>交易</th>
+                    <th>评分</th>
+                  </tr>
+                </thead>
+                <tbody id="optimizeTable"></tbody>
+              </table>
+            </div>
           </section>
           <section id="researchPanel" class="mode-panel hidden">
             <div id="researchBrief" class="research-brief"></div>
