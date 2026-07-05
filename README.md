@@ -33,7 +33,16 @@
 BA 量化/ai-quant-lab/indicator-studio/index.html
 ```
 
-当前支持 MA、EMA、BOLL、MACD、RSI、KDJ、ATR、成交量均线、信号视图、对比视图、参数优化视图、研究摘要、配置保存、配置导入导出、分享链接和 CSV 下载。
+当前支持 MA、EMA、BOLL、MACD、RSI、KDJ、ATR、成交量均线、信号视图、对比视图、参数优化视图、模板市场、AI 指标解释、策略草稿、本地研究项目、实验历史、配置导入导出、分享链接和 CSV 下载。
+
+真实数据和本地回测可通过本地 Python 服务接入：
+
+```text
+cd "BA 量化/ai-quant-lab/indicator-studio"
+/opt/miniconda3/envs/quant/bin/python backend/quant_lab_server.py
+```
+
+页面中把数据源切换为 AkShare、Yahoo Finance、RQData 或 Tushare 后即可通过 `http://127.0.0.1:8766` 拉取数据。Tushare 需要本机安装 `tushare` 并设置 `TUSHARE_TOKEN`，RQData 需要本机授权可用。
 
 在线访问：
 

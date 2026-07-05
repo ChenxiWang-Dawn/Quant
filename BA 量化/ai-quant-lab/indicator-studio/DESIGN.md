@@ -6,6 +6,7 @@
 
 - 运行方式：直接打开 `index.html`。
 - 数据来源：内置示例行情，或导入 CSV。
+- 真实数据：可连接本地 Python 服务，通过 AkShare、Yahoo Finance、RQData、Tushare 拉取行情。
 - CSV 字段：`date,open,high,low,close,volume`。
 - 图表能力：K 线、成交量、十字光标、滚轮缩放。
 - 主图指标：MA、EMA、BOLL。
@@ -16,9 +17,34 @@
 - 策略摘要：用规则信号做简化满仓买卖模拟，展示收益、回撤、交易数和胜率。
 - 对比视图：多只股票归一化到 100 起点，比较区间表现。
 - 优化视图：扫描 MA 快慢线参数组合，展示收益、回撤、交易次数、评分和热力图。
+- 回测视图：浏览器轻量回测；本地服务检测到 rqalpha 后可作为后续完整回测入口。
+- 模板市场：内置趋势跟随、动量反转、波动风险三类指标组合，可继续扩展。
+- AI 视图：基于当前指标、信号和参数扫描结果生成解释与策略草稿。
+- 项目视图：使用 localStorage 管理本地研究项目、实验历史和版本对比。
 - 研究摘要：自动汇总趋势结构、动量状态、波动风险和最近信号。
 - 配置能力：保存到浏览器 localStorage、加载、删除、导入/导出 JSON、生成分享链接。
 - 数据导出：可下载当前 K 线数据为 CSV。
+
+## 本地真实数据服务
+
+静态页面部署到 GitHub Pages 后仍可使用示例数据。若需要真实行情和本地回测，在本机启动：
+
+```text
+/opt/miniconda3/envs/quant/bin/python backend/quant_lab_server.py
+```
+
+默认服务地址为：
+
+```text
+http://127.0.0.1:8766
+```
+
+数据源说明：
+
+- AkShare：当前 `quant` 环境已安装。
+- Yahoo Finance：当前 `quant` 环境已安装 `yfinance`。
+- RQData：当前 `quant` 环境已安装 `rqdatac`，需要本机 RQData 授权可用。
+- Tushare：需要安装 `tushare` 并设置环境变量 `TUSHARE_TOKEN`。
 
 ## 界面结构
 
@@ -37,3 +63,4 @@
 - 接入 rqalpha 做轻量回测。
 - 增加 AI 指标解释和策略草稿生成。
 - 增加本地研究项目管理、实验历史和参数版本对比。
+- 将 rqalpha 从轻量入口扩展为完整数据包回测和交易明细解析。

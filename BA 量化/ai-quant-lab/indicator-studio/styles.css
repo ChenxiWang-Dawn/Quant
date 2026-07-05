@@ -166,6 +166,14 @@ input:focus {
   width: 230px;
 }
 
+#symbolInput {
+  width: 210px;
+}
+
+#backendUrlInput {
+  width: 190px;
+}
+
 .compact-select {
   width: 155px;
 }
@@ -572,15 +580,61 @@ input[type="color"] {
   gap: 10px;
 }
 
-.research-item {
+.template-market,
+.ai-brief {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.research-item,
+.template-card,
+.ai-card {
   min-height: 108px;
   padding: 12px;
 }
 
-.research-item strong {
+.research-item strong,
+.template-card strong,
+.ai-card strong {
   display: block;
   margin-top: 7px;
   font-size: 15px;
+}
+
+.template-card,
+.ai-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.template-card footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.template-card p,
+.ai-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.code-panel {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .research-item.good {
@@ -761,11 +815,15 @@ td.numeric {
 
   .metric-strip,
   .summary-grid,
-  .research-brief {
+  .research-brief,
+  .template-market,
+  .ai-brief {
     grid-template-columns: 1fr;
   }
 
   #symbolSelect,
+  #symbolInput,
+  #backendUrlInput,
   .data-toolbar label,
   .data-toolbar select,
   .data-toolbar input {

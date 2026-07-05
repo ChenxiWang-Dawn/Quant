@@ -144,16 +144,41 @@
   };
 
   const STORAGE_KEY = "aiQuantLab.indicatorStudio.presets";
+  const PROJECT_KEY = "aiQuantLab.indicatorStudio.projects";
+
+  const MARKET_TEMPLATES = [
+    {
+      id: "trend",
+      name: "趋势跟随",
+      tag: "低频观察",
+      desc: "MA、EMA、MACD 与成交量均线，适合判断趋势延续和中期结构。",
+    },
+    {
+      id: "momentum",
+      name: "动量反转",
+      tag: "短线节奏",
+      desc: "BOLL、RSI、KDJ 与成交量，适合观察超买超卖和波动边界。",
+    },
+    {
+      id: "risk",
+      name: "波动风险",
+      tag: "风控优先",
+      desc: "BOLL、ATR 与中期均线，适合观察波动扩张、回撤和仓位风险。",
+    },
+  ];
 
   const el = {
     canvas: document.querySelector("#priceCanvas"),
     tooltip: document.querySelector("#tooltip"),
-    symbolSelect: document.querySelector("#symbolSelect"),
+    dataSourceSelect: document.querySelector("#dataSourceSelect"),
+    backendUrlInput: document.querySelector("#backendUrlInput"),
+    symbolInput: document.querySelector("#symbolInput"),
     startDate: document.querySelector("#startDate"),
     endDate: document.querySelector("#endDate"),
     frequencySelect: document.querySelector("#frequencySelect"),
     adjustSelect: document.querySelector("#adjustSelect"),
     loadDataBtn: document.querySelector("#loadDataBtn"),
+    checkBackendBtn: document.querySelector("#checkBackendBtn"),
     resetViewBtn: document.querySelector("#resetViewBtn"),
     csvInput: document.querySelector("#csvInput"),
     configInput: document.querySelector("#configInput"),
@@ -177,6 +202,10 @@
     signalsPanel: document.querySelector("#signalsPanel"),
     comparePanel: document.querySelector("#comparePanel"),
     optimizePanel: document.querySelector("#optimizePanel"),
+    backtestPanel: document.querySelector("#backtestPanel"),
+    templatesPanel: document.querySelector("#templatesPanel"),
+    aiPanel: document.querySelector("#aiPanel"),
+    projectsPanel: document.querySelector("#projectsPanel"),
     researchPanel: document.querySelector("#researchPanel"),
     signalProfile: document.querySelector("#signalProfile"),
     rsiLow: document.querySelector("#rsiLow"),
@@ -194,6 +223,23 @@
     runOptimizeBtn: document.querySelector("#runOptimizeBtn"),
     optimizeSummary: document.querySelector("#optimizeSummary"),
     optimizeTable: document.querySelector("#optimizeTable"),
+    backtestEngine: document.querySelector("#backtestEngine"),
+    initialCash: document.querySelector("#initialCash"),
+    strategySelect: document.querySelector("#strategySelect"),
+    runBacktestBtn: document.querySelector("#runBacktestBtn"),
+    generateStrategyBtn: document.querySelector("#generateStrategyBtn"),
+    backtestSummary: document.querySelector("#backtestSummary"),
+    strategyDraft: document.querySelector("#strategyDraft"),
+    templateMarket: document.querySelector("#templateMarket"),
+    explainBtn: document.querySelector("#explainBtn"),
+    draftFromAiBtn: document.querySelector("#draftFromAiBtn"),
+    aiBrief: document.querySelector("#aiBrief"),
+    projectNameInput: document.querySelector("#projectNameInput"),
+    saveProjectBtn: document.querySelector("#saveProjectBtn"),
+    loadProjectBtn: document.querySelector("#loadProjectBtn"),
+    deleteProjectBtn: document.querySelector("#deleteProjectBtn"),
+    projectSummary: document.querySelector("#projectSummary"),
+    experimentTable: document.querySelector("#experimentTable"),
     researchBrief: document.querySelector("#researchBrief"),
     templateButtons: document.querySelectorAll(".template-button"),
   };
@@ -211,6 +257,10 @@
     compareSymbols: ["000001.XSHE", "600519.XSHG", "300750.XSHE"],
     compareData: [],
     optimization: { results: [], best: null },
+    backtest: {},
+    backend: { ok: false, providers: {}, message: "未连接" },
+    aiCards: [],
+    projects: [],
     research: [],
     visibleStart: 0,
     visibleEnd: 0,
@@ -356,16 +406,75 @@
     return Math.round(value * 100) / 100;
   }
 
+  async function loadData() {
+    const source = el.dataSourceSelect.value;
+    if (source === "sample") {
+      loadGeneratedData();
+      return;
+    }
+    try {
+      setStatus(`正在通过 ${source} 获取真实行情...`);
+      const rows = await fetchRemoteCandles(source);
+      if (!rows.length) throw new Error("数据源返回空行情");
+      state.candles = rows;
+      state.symbol = el.symbolInput.value.trim();
+      state.sourceLabel = sourceLabel(source);
+      resetView();
+      updateTitles();
+      setStatus(`已通过 ${sourceLabel(source)} 加载 ${rows.length} 根K线`);
+    } catch (error) {
+      loadGeneratedData();
+      setStatus(`${sourceLabel(source)} 加载失败，已回退示例行情：${error.message}`);
+    }
+  }
+
   function loadGeneratedData() {
     const start = parseDate(el.startDate.value);
     const end = parseDate(el.endDate.value);
-    const daily = generateDailySeries(el.symbolSelect.value, start, end);
+    const symbol = el.symbolInput.value.trim() || "000001.XSHE";
+    const daily = generateDailySeries(symbol, start, end);
     state.candles = el.frequencySelect.value === "1w" ? toWeekly(daily) : daily;
-    state.symbol = el.symbolSelect.value;
+    state.symbol = symbol;
     state.sourceLabel = "示例行情";
     resetView();
     updateTitles();
     setStatus(`已加载 ${state.candles.length} 根K线`);
+  }
+
+  async function fetchRemoteCandles(source) {
+    const params = new URLSearchParams({
+      source,
+      symbol: el.symbolInput.value.trim(),
+      start: el.startDate.value,
+      end: el.endDate.value,
+      frequency: el.frequencySelect.value,
+      adjust: el.adjustSelect.value,
+    });
+    const response = await fetch(`${backendBaseUrl()}/api/price?${params.toString()}`);
+    const payload = await response.json();
+    if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+    return payload.candles.map((row) => ({
+      date: row.date,
+      open: Number(row.open),
+      high: Number(row.high),
+      low: Number(row.low),
+      close: Number(row.close),
+      volume: Number(row.volume || 0),
+    }));
+  }
+
+  function backendBaseUrl() {
+    return el.backendUrlInput.value.replace(/\/+$/, "");
+  }
+
+  function sourceLabel(source) {
+    return {
+      sample: "示例行情",
+      akshare: "AkShare",
+      yfinance: "Yahoo Finance",
+      rqdata: "RQData",
+      tushare: "Tushare",
+    }[source] || source;
   }
 
   function setStatus(text) {
@@ -374,7 +483,7 @@
 
   function updateTitles() {
     const meta = STOCKS[state.symbol];
-    const name = meta ? meta.name : "CSV 数据";
+    const name = meta ? meta.name : "自定义标的";
     el.chartTitle.textContent = `${state.symbol} ${name}`;
     const freq = el.frequencySelect.value === "1w" ? "周线" : "日线";
     const adjust = el.adjustSelect.value === "pre" ? "前复权" : "不复权";
@@ -613,6 +722,9 @@
     renderTradeLedger();
     renderCompareSummary();
     renderOptimizeSummary();
+    renderBacktestSummary();
+    renderAiBrief();
+    renderProjectPanel();
     renderResearchBrief();
   }
 
@@ -1038,6 +1150,87 @@
         `
       )
       .join("");
+  }
+
+  function renderBacktestSummary() {
+    const bt = state.backtest.summary || state.signals.strategy || {};
+    el.backtestSummary.innerHTML = [
+      summaryItem("回测引擎", state.backtest.engine || "浏览器轻量回测", state.backtest.note || "基于当前信号规则"),
+      summaryItem("回测收益", formatPercent(bt.totalReturn || 0), `初始资金 ${intFmt.format(Number(el.initialCash.value) || 100000)}`, bt.totalReturn),
+      summaryItem("最大回撤", formatPercent(bt.maxDd || 0), `${bt.trades || 0} 笔交易`, bt.maxDd),
+      summaryItem("胜率", formatPercent(bt.winRate || 0), state.backtest.error || "仅作研究辅助"),
+    ].join("");
+  }
+
+  function renderTemplateMarket() {
+    el.templateMarket.innerHTML = MARKET_TEMPLATES.map(
+      (item) => `
+        <article class="template-card">
+          <span>${item.tag}</span>
+          <strong>${item.name}</strong>
+          <p>${item.desc}</p>
+          <footer>
+            <button class="primary-button" data-template-market="${item.id}">应用</button>
+            <button class="ghost-button" data-preview-template="${item.id}">预览</button>
+          </footer>
+        </article>
+      `
+    ).join("");
+  }
+
+  function renderAiBrief() {
+    const cards = state.aiCards.length ? state.aiCards : buildAiCards();
+    el.aiBrief.innerHTML = cards
+      .map((card) => `<article class="ai-card"><span>${card.tag}</span><strong>${card.title}</strong><p>${card.body}</p></article>`)
+      .join("");
+  }
+
+  function buildAiCards() {
+    const stats = state.stats || {};
+    const lastSignal = state.signals.events.at(-1);
+    const best = state.optimization.best;
+    return [
+      {
+        tag: "市场状态",
+        title: stats.totalReturn >= 0 ? "区间偏强" : "区间承压",
+        body: `当前样本区间收益为 ${formatPercent(stats.totalReturn || 0)}，最大回撤为 ${formatPercent(stats.maxDd || 0)}。先观察趋势结构，再决定是否提高信号确认强度。`,
+      },
+      {
+        tag: "信号解释",
+        title: lastSignal ? `${lastSignal.date} ${lastSignal.type === "buy" ? "买入" : "卖出"}信号` : "暂无确认信号",
+        body: lastSignal ? `触发原因：${lastSignal.reasons.join("、")}。建议结合成交量和波动状态复核，避免只看单个指标。` : "当前参数组合没有形成确认信号，可降低阈值或切换模板进行对比。",
+      },
+      {
+        tag: "策略草稿",
+        title: best ? `MA ${best.fast}/${best.slow}` : "等待参数扫描",
+        body: best ? `参数扫描中该组合评分较高，收益 ${formatPercent(best.totalReturn)}，回撤 ${formatPercent(best.maxDd)}。下一步适合用 rqalpha 做交易成本和撮合验证。` : "运行优化后，可把最佳参数写入策略草稿，再进入回测视图验证。",
+      },
+    ];
+  }
+
+  function renderProjectPanel() {
+    const projects = loadProjects();
+    state.projects = projects;
+    const current = projects.filter((item) => item.name === el.projectNameInput.value.trim());
+    el.projectSummary.innerHTML = [
+      summaryItem("项目数", `${new Set(projects.map((item) => item.name)).size}`, "localStorage 本地保存"),
+      summaryItem("实验数", `${projects.length}`, `当前项目 ${current.length} 条`),
+      summaryItem("最近收益", projects[0] ? formatPercent(projects[0].returnValue) : "--", projects[0]?.symbol || "暂无实验", projects[0]?.returnValue),
+      summaryItem("版本对比", current.length >= 2 ? `${current.length} 个版本` : "版本不足", "保存多次实验后可比较"),
+    ].join("");
+    el.experimentTable.innerHTML = projects.slice(0, 30).map(
+      (item) => `
+        <tr data-experiment-id="${item.id}">
+          <td>${item.time}</td>
+          <td>${item.name}</td>
+          <td>${item.symbol}</td>
+          <td>${item.source}</td>
+          <td class="numeric">${formatPercent(item.returnValue)}</td>
+          <td class="numeric">${formatPercent(item.maxDd)}</td>
+          <td>${item.template || "自定义"}</td>
+        </tr>
+      `
+    ).join("") || `<tr><td colspan="7">暂无实验历史</td></tr>`;
   }
 
   function renderResearchBrief() {
@@ -1687,6 +1880,10 @@
     el.signalsPanel.classList.toggle("hidden", mode !== "signals");
     el.comparePanel.classList.toggle("hidden", mode !== "compare");
     el.optimizePanel.classList.toggle("hidden", mode !== "optimize");
+    el.backtestPanel.classList.toggle("hidden", mode !== "backtest");
+    el.templatesPanel.classList.toggle("hidden", mode !== "templates");
+    el.aiPanel.classList.toggle("hidden", mode !== "ai");
+    el.projectsPanel.classList.toggle("hidden", mode !== "projects");
     el.researchPanel.classList.toggle("hidden", mode !== "research");
     el.tooltip.classList.add("hidden");
     draw();
@@ -1703,6 +1900,157 @@
     recomputeAndDraw();
     const label = templateName === "trend" ? "趋势" : templateName === "momentum" ? "动量" : "波动";
     setStatus(`已应用${label}模板`);
+  }
+
+  async function checkBackend() {
+    try {
+      const response = await fetch(`${backendBaseUrl()}/api/health`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || response.statusText);
+      state.backend = { ok: true, providers: payload.providers || {}, message: payload.message || "已连接" };
+      setStatus(`本地服务已连接：${Object.keys(state.backend.providers).filter((k) => state.backend.providers[k]).join(" / ") || "可用"}`);
+    } catch (error) {
+      state.backend = { ok: false, providers: {}, message: error.message };
+      setStatus(`本地服务未连接：${error.message}`);
+    }
+  }
+
+  async function runBacktest() {
+    if (el.backtestEngine.value === "rqalpha") {
+      try {
+        const response = await fetch(`${backendBaseUrl()}/api/backtest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symbol: state.symbol,
+            start: el.startDate.value,
+            end: el.endDate.value,
+            frequency: el.frequencySelect.value,
+            initialCash: Number(el.initialCash.value) || 100000,
+            strategy: el.strategySelect.value,
+            candles: state.candles,
+          }),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+        state.backtest = payload;
+        setStatus(`回测完成：${payload.engine}`);
+        renderBacktestSummary();
+        return;
+      } catch (error) {
+        state.backtest = runLocalBacktest(`rqalpha 不可用，已回退浏览器轻量回测：${error.message}`);
+      }
+    } else {
+      state.backtest = runLocalBacktest("浏览器内置轻量回测");
+    }
+    renderBacktestSummary();
+    setStatus("轻量回测完成");
+  }
+
+  function runLocalBacktest(note) {
+    const summary = state.signals.strategy || {};
+    return {
+      engine: "local",
+      note,
+      summary: {
+        totalReturn: summary.totalReturn || 0,
+        maxDd: summary.maxDd || 0,
+        trades: summary.trades || 0,
+        winRate: summary.winRate || 0,
+      },
+    };
+  }
+
+  function generateStrategyDraft() {
+    const best = state.optimization.best || { fast: 5, slow: 20 };
+    const code = `# AI Quant Lab 策略草稿：MA 双均线
+# 来源：Indicator Studio 当前研究配置
+
+from rqalpha.api import order_target_percent, history_bars
+
+
+def init(context):
+    context.symbol = "${state.symbol}"
+    context.fast = ${best.fast}
+    context.slow = ${best.slow}
+
+
+def handle_bar(context, bar_dict):
+    closes = history_bars(context.symbol, context.slow + 2, "1d", "close")
+    if closes is None or len(closes) < context.slow:
+        return
+    fast_ma = closes[-context.fast:].mean()
+    slow_ma = closes[-context.slow:].mean()
+    prev_fast = closes[-context.fast - 1:-1].mean()
+    prev_slow = closes[-context.slow - 1:-1].mean()
+
+    if prev_fast <= prev_slow and fast_ma > slow_ma:
+        order_target_percent(context.symbol, 0.95)
+    elif prev_fast >= prev_slow and fast_ma < slow_ma:
+        order_target_percent(context.symbol, 0)
+`;
+    el.strategyDraft.textContent = code;
+    el.strategyDraft.classList.remove("hidden");
+    return code;
+  }
+
+  function saveExperiment() {
+    const projects = loadProjects();
+    const name = el.projectNameInput.value.trim() || "默认研究项目";
+    const item = {
+      id: `exp-${Date.now()}`,
+      time: new Date().toLocaleString("zh-CN", { hour12: false }),
+      name,
+      symbol: state.symbol,
+      source: state.sourceLabel,
+      returnValue: state.stats.totalReturn || 0,
+      maxDd: state.stats.maxDd || 0,
+      template: inferTemplateName(),
+      config: getConfig(),
+      stats: state.stats,
+      signals: state.signals.strategy,
+      optimization: state.optimization.best,
+    };
+    projects.unshift(item);
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(projects.slice(0, 120)));
+    renderProjectPanel();
+    setStatus(`已保存实验：${name}`);
+  }
+
+  function loadProjects() {
+    try {
+      return JSON.parse(localStorage.getItem(PROJECT_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function loadLatestProject() {
+    const name = el.projectNameInput.value.trim();
+    const item = loadProjects().find((project) => !name || project.name === name);
+    if (!item) {
+      setStatus("没有可加载的项目实验");
+      return;
+    }
+    applyConfig(item.config);
+    setStatus(`已加载实验版本：${item.name} / ${item.time}`);
+  }
+
+  function deleteProject() {
+    const name = el.projectNameInput.value.trim();
+    if (!name) return;
+    const next = loadProjects().filter((project) => project.name !== name);
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(next));
+    renderProjectPanel();
+    setStatus(`已删除项目：${name}`);
+  }
+
+  function inferTemplateName() {
+    const types = state.indicators.filter((item) => item.visible).map((item) => item.type).sort().join(",");
+    if (types.includes("MACD") && types.includes("EMA")) return "趋势跟随";
+    if (types.includes("KDJ") && types.includes("RSI")) return "动量反转";
+    if (types.includes("ATR")) return "波动风险";
+    return "自定义";
   }
 
   function indicatorSummary(indicator) {
@@ -1865,6 +2213,8 @@
   function getConfig() {
     return {
       symbol: state.symbol,
+      dataSource: el.dataSourceSelect.value,
+      backendUrl: el.backendUrlInput.value,
       startDate: el.startDate.value,
       endDate: el.endDate.value,
       frequency: el.frequencySelect.value,
@@ -1890,7 +2240,9 @@
   }
 
   function applyConfig(config) {
-    if (config.symbol && STOCKS[config.symbol]) el.symbolSelect.value = config.symbol;
+    if (config.symbol) el.symbolInput.value = config.symbol;
+    if (config.dataSource) el.dataSourceSelect.value = config.dataSource;
+    if (config.backendUrl) el.backendUrlInput.value = config.backendUrl;
     if (config.startDate) el.startDate.value = config.startDate;
     if (config.endDate) el.endDate.value = config.endDate;
     if (config.frequency) el.frequencySelect.value = config.frequency;
@@ -1912,7 +2264,7 @@
     if (Array.isArray(config.indicators)) state.indicators = clone(config.indicators);
     renderIndicatorList();
     renderCompareSymbols();
-    loadGeneratedData();
+    loadData();
     if (config.mode) setMode(config.mode);
   }
 
@@ -2158,7 +2510,8 @@
   }
 
   function bindEvents() {
-    el.loadDataBtn.addEventListener("click", loadGeneratedData);
+    el.loadDataBtn.addEventListener("click", loadData);
+    el.checkBackendBtn.addEventListener("click", checkBackend);
     el.resetViewBtn.addEventListener("click", resetView);
     el.addIndicatorBtn.addEventListener("click", () => addIndicator(el.indicatorTypeSelect.value));
     el.applyParamsBtn.addEventListener("click", recomputeAndDraw);
@@ -2178,6 +2531,40 @@
       updateAnalytics();
       setMode("optimize");
       setStatus("参数优化已完成");
+    });
+    el.runBacktestBtn.addEventListener("click", runBacktest);
+    el.generateStrategyBtn.addEventListener("click", generateStrategyDraft);
+    el.explainBtn.addEventListener("click", () => {
+      state.aiCards = buildAiCards();
+      renderAiBrief();
+      setStatus("已生成指标解释");
+    });
+    el.draftFromAiBtn.addEventListener("click", () => {
+      generateStrategyDraft();
+      setMode("backtest");
+      setStatus("已生成策略草稿");
+    });
+    el.saveProjectBtn.addEventListener("click", saveExperiment);
+    el.loadProjectBtn.addEventListener("click", loadLatestProject);
+    el.deleteProjectBtn.addEventListener("click", deleteProject);
+    el.templateMarket.addEventListener("click", (event) => {
+      const applyButton = event.target.closest("[data-template-market]");
+      const previewButton = event.target.closest("[data-preview-template]");
+      if (applyButton) {
+        applyIndicatorTemplate(applyButton.dataset.templateMarket);
+        setMode("chart");
+      }
+      if (previewButton) {
+        state.aiCards = [
+          {
+            tag: "模板预览",
+            title: MARKET_TEMPLATES.find((item) => item.id === previewButton.dataset.previewTemplate)?.name || "模板",
+            body: MARKET_TEMPLATES.find((item) => item.id === previewButton.dataset.previewTemplate)?.desc || "",
+          },
+        ];
+        renderAiBrief();
+        setMode("ai");
+      }
     });
     el.compareSymbols.addEventListener("change", () => {
       state.compareSymbols = Array.from(el.compareSymbols.querySelectorAll("input:checked")).map((input) => input.value);
@@ -2252,9 +2639,11 @@
     initDates();
     renderIndicatorList();
     renderCompareSymbols();
+    renderTemplateMarket();
+    renderProjectPanel();
     refreshPresetSelect();
     bindEvents();
-    loadGeneratedData();
+    loadData();
     loadConfigFromHash();
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(el.canvas.parentElement);

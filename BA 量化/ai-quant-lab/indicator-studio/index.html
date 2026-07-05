@@ -38,13 +38,31 @@
 
       <section class="data-toolbar" aria-label="数据选择">
         <label>
-          股票
-          <select id="symbolSelect">
-            <option value="000001.XSHE">000001.XSHE 平安银行</option>
-            <option value="600519.XSHG">600519.XSHG 贵州茅台</option>
-            <option value="300750.XSHE">300750.XSHE 宁德时代</option>
-            <option value="002050.XSHE">002050.XSHE 三花智控</option>
+          数据源
+          <select id="dataSourceSelect">
+            <option value="sample">示例行情</option>
+            <option value="akshare">AkShare</option>
+            <option value="yfinance">Yahoo Finance</option>
+            <option value="rqdata">RQData</option>
+            <option value="tushare">Tushare</option>
           </select>
+        </label>
+        <label>
+          本地服务
+          <input id="backendUrlInput" type="text" value="http://127.0.0.1:8766" />
+        </label>
+        <label>
+          股票
+          <input id="symbolInput" type="text" value="000001.XSHE" list="symbolOptions" />
+          <datalist id="symbolOptions">
+            <option value="000001.XSHE">平安银行</option>
+            <option value="600519.XSHG">贵州茅台</option>
+            <option value="300750.XSHE">宁德时代</option>
+            <option value="002050.XSHE">三花智控</option>
+            <option value="AAPL">Apple</option>
+            <option value="MSFT">Microsoft</option>
+            <option value="NVDA">NVIDIA</option>
+          </datalist>
         </label>
         <label>
           开始
@@ -69,6 +87,7 @@
           </select>
         </label>
         <button id="loadDataBtn" class="primary-button">加载数据</button>
+        <button id="checkBackendBtn" class="ghost-button">连接服务</button>
         <button id="resetViewBtn" class="ghost-button">重置视图</button>
         <div class="template-group" aria-label="指标模板">
           <button class="template-button" data-template="trend">趋势</button>
@@ -124,6 +143,10 @@
             <button class="mode-tab" data-mode="signals">信号</button>
             <button class="mode-tab" data-mode="compare">对比</button>
             <button class="mode-tab" data-mode="optimize">优化</button>
+            <button class="mode-tab" data-mode="backtest">回测</button>
+            <button class="mode-tab" data-mode="templates">模板</button>
+            <button class="mode-tab" data-mode="ai">AI</button>
+            <button class="mode-tab" data-mode="projects">项目</button>
             <button class="mode-tab" data-mode="research">研究</button>
           </nav>
           <section id="signalsPanel" class="mode-panel hidden">
@@ -208,6 +231,70 @@
                   </tr>
                 </thead>
                 <tbody id="optimizeTable"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="backtestPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                引擎
+                <select id="backtestEngine">
+                  <option value="local">浏览器轻量回测</option>
+                  <option value="rqalpha">本地 rqalpha</option>
+                </select>
+              </label>
+              <label>
+                初始资金
+                <input id="initialCash" type="number" min="10000" step="10000" value="100000" />
+              </label>
+              <label>
+                策略
+                <select id="strategySelect">
+                  <option value="signal">当前信号规则</option>
+                  <option value="ma_cross">MA 双均线</option>
+                </select>
+              </label>
+              <button id="runBacktestBtn" class="primary-button">运行回测</button>
+              <button id="generateStrategyBtn" class="ghost-button">生成策略草稿</button>
+            </div>
+            <div id="backtestSummary" class="summary-grid"></div>
+            <pre id="strategyDraft" class="code-panel hidden"></pre>
+          </section>
+          <section id="templatesPanel" class="mode-panel hidden">
+            <div id="templateMarket" class="template-market"></div>
+          </section>
+          <section id="aiPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <button id="explainBtn" class="primary-button">生成指标解释</button>
+              <button id="draftFromAiBtn" class="ghost-button">生成策略草稿</button>
+            </div>
+            <div id="aiBrief" class="ai-brief"></div>
+          </section>
+          <section id="projectsPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                项目名
+                <input id="projectNameInput" type="text" value="默认研究项目" />
+              </label>
+              <button id="saveProjectBtn" class="primary-button">保存实验</button>
+              <button id="loadProjectBtn" class="ghost-button">加载项目</button>
+              <button id="deleteProjectBtn" class="ghost-button">删除项目</button>
+            </div>
+            <div id="projectSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>项目</th>
+                    <th>标的</th>
+                    <th>数据源</th>
+                    <th>收益</th>
+                    <th>回撤</th>
+                    <th>模板</th>
+                  </tr>
+                </thead>
+                <tbody id="experimentTable"></tbody>
               </table>
             </div>
           </section>
