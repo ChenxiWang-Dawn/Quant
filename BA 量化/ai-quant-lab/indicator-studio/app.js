@@ -144,18 +144,47 @@
   };
 
   const STORAGE_KEY = "aiQuantLab.indicatorStudio.presets";
+  const PROJECT_KEY = "aiQuantLab.indicatorStudio.projects";
+
+  const MARKET_TEMPLATES = [
+    {
+      id: "trend",
+      name: "趋势跟随",
+      tag: "低频观察",
+      desc: "MA、EMA、MACD 与成交量均线，适合判断趋势延续和中期结构。",
+      strategy: { fast: 5, slow: 20, targetWeight: 0.95 },
+    },
+    {
+      id: "momentum",
+      name: "动量反转",
+      tag: "短线节奏",
+      desc: "BOLL、RSI、KDJ 与成交量，适合观察超买超卖和波动边界。",
+      strategy: { fast: 3, slow: 15, targetWeight: 0.75 },
+    },
+    {
+      id: "risk",
+      name: "波动风险",
+      tag: "风控优先",
+      desc: "BOLL、ATR 与中期均线，适合观察波动扩张、回撤和仓位风险。",
+      strategy: { fast: 10, slow: 60, targetWeight: 0.6 },
+    },
+  ];
 
   const el = {
     canvas: document.querySelector("#priceCanvas"),
     tooltip: document.querySelector("#tooltip"),
-    symbolSelect: document.querySelector("#symbolSelect"),
+    dataSourceSelect: document.querySelector("#dataSourceSelect"),
+    backendUrlInput: document.querySelector("#backendUrlInput"),
+    symbolInput: document.querySelector("#symbolInput"),
     startDate: document.querySelector("#startDate"),
     endDate: document.querySelector("#endDate"),
     frequencySelect: document.querySelector("#frequencySelect"),
     adjustSelect: document.querySelector("#adjustSelect"),
     loadDataBtn: document.querySelector("#loadDataBtn"),
+    checkBackendBtn: document.querySelector("#checkBackendBtn"),
     resetViewBtn: document.querySelector("#resetViewBtn"),
     csvInput: document.querySelector("#csvInput"),
+    configInput: document.querySelector("#configInput"),
     indicatorTypeSelect: document.querySelector("#indicatorTypeSelect"),
     addIndicatorBtn: document.querySelector("#addIndicatorBtn"),
     indicatorList: document.querySelector("#indicatorList"),
@@ -165,22 +194,66 @@
     deletePresetBtn: document.querySelector("#deletePresetBtn"),
     presetSelect: document.querySelector("#presetSelect"),
     exportConfigBtn: document.querySelector("#exportConfigBtn"),
+    shareConfigBtn: document.querySelector("#shareConfigBtn"),
+    downloadCsvBtn: document.querySelector("#downloadCsvBtn"),
     chartTitle: document.querySelector("#chartTitle"),
     chartSubtitle: document.querySelector("#chartSubtitle"),
+    openStrategyBtn: document.querySelector("#openStrategyBtn"),
+    collapseIndicatorsBtn: document.querySelector("#collapseIndicatorsBtn"),
+    workspace: document.querySelector(".workspace"),
     statusText: document.querySelector("#statusText"),
     cursorText: document.querySelector("#cursorText"),
     metricStrip: document.querySelector("#metricStrip"),
     modeTabs: document.querySelectorAll(".mode-tab"),
     signalsPanel: document.querySelector("#signalsPanel"),
     comparePanel: document.querySelector("#comparePanel"),
+    optimizePanel: document.querySelector("#optimizePanel"),
+    backtestPanel: document.querySelector("#backtestPanel"),
+    templatesPanel: document.querySelector("#templatesPanel"),
+    aiPanel: document.querySelector("#aiPanel"),
+    projectsPanel: document.querySelector("#projectsPanel"),
     researchPanel: document.querySelector("#researchPanel"),
     signalProfile: document.querySelector("#signalProfile"),
     rsiLow: document.querySelector("#rsiLow"),
     rsiHigh: document.querySelector("#rsiHigh"),
     feeBps: document.querySelector("#feeBps"),
     signalSummary: document.querySelector("#signalSummary"),
+    tradeLedger: document.querySelector("#tradeLedger"),
     compareSymbols: document.querySelector("#compareSymbols"),
     compareSummary: document.querySelector("#compareSummary"),
+    optFastStart: document.querySelector("#optFastStart"),
+    optFastEnd: document.querySelector("#optFastEnd"),
+    optSlowStart: document.querySelector("#optSlowStart"),
+    optSlowEnd: document.querySelector("#optSlowEnd"),
+    optStep: document.querySelector("#optStep"),
+    runOptimizeBtn: document.querySelector("#runOptimizeBtn"),
+    optimizeSummary: document.querySelector("#optimizeSummary"),
+    optimizeTable: document.querySelector("#optimizeTable"),
+    backtestEngine: document.querySelector("#backtestEngine"),
+    initialCash: document.querySelector("#initialCash"),
+    strategySelect: document.querySelector("#strategySelect"),
+    strategyFastWindow: document.querySelector("#strategyFastWindow"),
+    strategySlowWindow: document.querySelector("#strategySlowWindow"),
+    targetWeight: document.querySelector("#targetWeight"),
+    slippageBps: document.querySelector("#slippageBps"),
+    minCommission: document.querySelector("#minCommission"),
+    runBacktestBtn: document.querySelector("#runBacktestBtn"),
+    runStrategyOptimizeBtn: document.querySelector("#runStrategyOptimizeBtn"),
+    generateStrategyBtn: document.querySelector("#generateStrategyBtn"),
+    backtestSummary: document.querySelector("#backtestSummary"),
+    backtestMetricTable: document.querySelector("#backtestMetricTable"),
+    backtestTradeTable: document.querySelector("#backtestTradeTable"),
+    strategyDraft: document.querySelector("#strategyDraft"),
+    templateMarket: document.querySelector("#templateMarket"),
+    explainBtn: document.querySelector("#explainBtn"),
+    draftFromAiBtn: document.querySelector("#draftFromAiBtn"),
+    aiBrief: document.querySelector("#aiBrief"),
+    projectNameInput: document.querySelector("#projectNameInput"),
+    saveProjectBtn: document.querySelector("#saveProjectBtn"),
+    loadProjectBtn: document.querySelector("#loadProjectBtn"),
+    deleteProjectBtn: document.querySelector("#deleteProjectBtn"),
+    projectSummary: document.querySelector("#projectSummary"),
+    experimentTable: document.querySelector("#experimentTable"),
     researchBrief: document.querySelector("#researchBrief"),
     templateButtons: document.querySelectorAll(".template-button"),
   };
@@ -189,6 +262,7 @@
   const state = {
     candles: [],
     symbol: "000001.XSHE",
+    securityName: "",
     sourceLabel: "示例行情",
     indicators: clone(DEFAULT_INDICATORS),
     computed: {},
@@ -197,6 +271,11 @@
     signals: { events: [], strategy: {}, equity: [] },
     compareSymbols: ["000001.XSHE", "600519.XSHG", "300750.XSHE"],
     compareData: [],
+    optimization: { results: [], best: null },
+    backtest: {},
+    backend: { ok: false, providers: {}, message: "未连接" },
+    aiCards: [],
+    projects: [],
     research: [],
     visibleStart: 0,
     visibleEnd: 0,
@@ -342,16 +421,111 @@
     return Math.round(value * 100) / 100;
   }
 
+  async function loadData() {
+    const source = el.dataSourceSelect.value;
+    el.symbolInput.value = normalizeSymbolInput(el.symbolInput.value);
+    clampEndDateToToday();
+    if (source === "sample") {
+      loadGeneratedData();
+      return;
+    }
+    try {
+      setStatus(`正在通过 ${source} 获取真实行情...`);
+      const result = await fetchRemoteCandles(source);
+      const rows = result.candles;
+      if (!rows.length) throw new Error("数据源返回空行情");
+      state.candles = rows;
+      state.symbol = result.symbol || el.symbolInput.value.trim();
+      state.securityName = result.name || "";
+      state.sourceLabel = sourceLabel(result.source || source);
+      el.symbolInput.value = state.symbol;
+      resetView();
+      updateTitles();
+      setStatus(`已通过 ${state.sourceLabel} 加载 ${rows.length} 根K线`);
+    } catch (error) {
+      setStatus(`${sourceLabel(source)} 加载失败，未更新图表：${error.message}`);
+    }
+  }
+
   function loadGeneratedData() {
+    clampEndDateToToday();
     const start = parseDate(el.startDate.value);
     const end = parseDate(el.endDate.value);
-    const daily = generateDailySeries(el.symbolSelect.value, start, end);
+    const symbol = normalizeSymbolInput(el.symbolInput.value) || "000001.XSHE";
+    el.symbolInput.value = symbol;
+    const daily = generateDailySeries(symbol, start, end);
     state.candles = el.frequencySelect.value === "1w" ? toWeekly(daily) : daily;
-    state.symbol = el.symbolSelect.value;
+    state.symbol = symbol;
+    state.securityName = STOCKS[symbol]?.name || "";
     state.sourceLabel = "示例行情";
     resetView();
     updateTitles();
     setStatus(`已加载 ${state.candles.length} 根K线`);
+  }
+
+  async function fetchRemoteCandles(source) {
+    const params = new URLSearchParams({
+      source,
+      symbol: el.symbolInput.value.trim(),
+      start: el.startDate.value,
+      end: el.endDate.value,
+      frequency: el.frequencySelect.value,
+      adjust: el.adjustSelect.value,
+    });
+    const response = await fetch(`${backendBaseUrl()}/api/price?${params.toString()}`);
+    const payload = await response.json();
+    if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+    return {
+      source: payload.source,
+      symbol: payload.symbol,
+      name: payload.name,
+      candles: payload.candles.map((row) => ({
+        date: row.date,
+        open: Number(row.open),
+        high: Number(row.high),
+        low: Number(row.low),
+        close: Number(row.close),
+        volume: Number(row.volume || 0),
+      })),
+    };
+  }
+
+  function normalizeSymbolInput(value) {
+    const raw = String(value || "").trim().toUpperCase();
+    if (!raw) return "";
+    const compact = raw.replace(/\.(SH|SZ|SS)$/i, "").replace(/\.(XSHG|XSHE|XBSE)$/i, "");
+    if (/^\d{6}$/.test(compact)) {
+      if (/^(60|68|90|51|52|56|58)/.test(compact)) return `${compact}.XSHG`;
+      if (/^(00|30|15|16|18|20)/.test(compact)) return `${compact}.XSHE`;
+      if (/^(43|83|87|88)/.test(compact)) return `${compact}.XBSE`;
+    }
+    if (/^\d{6}\.SH$/i.test(raw)) return raw.replace(/\.SH$/i, ".XSHG");
+    if (/^\d{6}\.SZ$/i.test(raw)) return raw.replace(/\.SZ$/i, ".XSHE");
+    if (/^\d{6}\.SS$/i.test(raw)) return raw.replace(/\.SS$/i, ".XSHG");
+    return raw;
+  }
+
+  function clampEndDateToToday() {
+    const today = formatDate(new Date());
+    if (el.endDate.value > today) {
+      el.endDate.value = today;
+    }
+  }
+
+  function backendBaseUrl() {
+    return el.backendUrlInput.value.replace(/\/+$/, "");
+  }
+
+  function sourceLabel(source) {
+    return {
+      sample: "示例行情",
+      auto: "自动选择",
+      akshare: "AkShare",
+      sina: "新浪财经",
+      yfinance: "Yahoo Finance",
+      rqdata: "RQData",
+      tushare: "Tushare",
+    }[source] || source;
   }
 
   function setStatus(text) {
@@ -360,7 +534,7 @@
 
   function updateTitles() {
     const meta = STOCKS[state.symbol];
-    const name = meta ? meta.name : "CSV 数据";
+    const name = state.securityName || (meta ? meta.name : "自定义标的");
     el.chartTitle.textContent = `${state.symbol} ${name}`;
     const freq = el.frequencySelect.value === "1w" ? "周线" : "日线";
     const adjust = el.adjustSelect.value === "pre" ? "前复权" : "不复权";
@@ -592,10 +766,17 @@
     state.stats = calcStats(state.candles);
     state.signals = calcSignalsAndStrategy();
     state.compareData = calcCompareData();
+    state.optimization = calcOptimizationGrid();
     state.research = buildResearchBrief();
     renderMetricStrip();
     renderSignalSummary();
+    renderTradeLedger();
     renderCompareSummary();
+    renderOptimizeSummary();
+    renderBacktestSummary();
+    renderBacktestDetails();
+    renderAiBrief();
+    renderProjectPanel();
     renderResearchBrief();
   }
 
@@ -823,6 +1004,70 @@
     });
   }
 
+  function calcOptimizationGrid() {
+    const fastStart = cleanPeriod(el.optFastStart.value, 3);
+    const fastEnd = cleanPeriod(el.optFastEnd.value, 18);
+    const slowStart = cleanPeriod(el.optSlowStart.value, 20);
+    const slowEnd = cleanPeriod(el.optSlowEnd.value, 80);
+    const step = clamp(cleanPeriod(el.optStep.value, 5), 1, 20);
+    const fastMin = Math.min(fastStart, fastEnd);
+    const fastMax = Math.max(fastStart, fastEnd);
+    const slowMin = Math.min(slowStart, slowEnd);
+    const slowMax = Math.max(slowStart, slowEnd);
+    const results = [];
+
+    for (let fast = fastMin; fast <= fastMax; fast += step) {
+      for (let slow = slowMin; slow <= slowMax; slow += step) {
+        if (fast >= slow) continue;
+        results.push(simulateMaStrategy(fast, slow));
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    return {
+      results,
+      best: results[0] || null,
+      ranges: { fastMin, fastMax, slowMin, slowMax, step },
+    };
+  }
+
+  function simulateMaStrategy(fast, slow) {
+    const closes = valuesOf("close");
+    const fastLine = sma(closes, fast);
+    const slowLine = sma(closes, slow);
+    const fee = (Number(el.feeBps.value) || 0) / 10000;
+    let cash = 100000;
+    let shares = 0;
+    let trades = 0;
+    const equity = [];
+
+    for (let i = 0; i < state.candles.length; i += 1) {
+      if (i > 0 && crossUp(fastLine, slowLine, i) && shares === 0) {
+        shares = (cash * (1 - fee)) / closes[i];
+        cash = 0;
+        trades += 1;
+      }
+      if (i > 0 && crossDown(fastLine, slowLine, i) && shares > 0) {
+        cash = shares * closes[i] * (1 - fee);
+        shares = 0;
+      }
+      equity.push(cash + shares * closes[i]);
+    }
+
+    const totalReturn = equity.length ? equity[equity.length - 1] / equity[0] - 1 : 0;
+    const drawdown = maxDrawdown(equity);
+    const score = totalReturn + drawdown * 0.65 - Math.max(0, trades - 18) * 0.002;
+    return {
+      fast,
+      slow,
+      totalReturn,
+      maxDd: drawdown,
+      trades,
+      score,
+      equity,
+    };
+  }
+
   function compareColor(symbol) {
     const palette = {
       "000001.XSHE": "#1f6feb",
@@ -863,7 +1108,11 @@
     const signal = state.signals.events.length
       ? ["info", "最近信号", `${state.signals.events.at(-1).date} 出现${state.signals.events.at(-1).type === "buy" ? "买入" : "卖出"}信号：${state.signals.events.at(-1).reasons.join("、")}。`]
       : ["info", "最近信号", "当前规则组合在样本内暂无确认信号。"];
-    return [trend, momentum, risk, signal];
+    const best = state.optimization.best;
+    const optimize = best
+      ? ["info", "参数扫描", `当前 MA 扫描中表现较好的组合是 Fast ${best.fast} / Slow ${best.slow}，综合评分 ${best.score.toFixed(3)}。`]
+      : ["info", "参数扫描", "样本长度不足或参数范围无有效组合，暂未形成优化结果。"];
+    return [trend, momentum, risk, signal, optimize];
   }
 
   function renderMetricStrip() {
@@ -896,10 +1145,260 @@
     ].join("");
   }
 
+  function renderTradeLedger() {
+    const events = state.signals.events.slice(-18).reverse();
+    if (!events.length) {
+      el.tradeLedger.innerHTML = `<tr><td colspan="5">暂无确认信号</td></tr>`;
+      return;
+    }
+    el.tradeLedger.innerHTML = events
+      .map(
+        (event) => `
+          <tr>
+            <td>${event.date}</td>
+            <td><span class="badge ${event.type}">${event.type === "buy" ? "买入" : "卖出"}</span></td>
+            <td class="numeric">${fmt.format(event.price)}</td>
+            <td class="numeric">${event.score}</td>
+            <td>${event.reasons.join("、")}</td>
+          </tr>
+        `
+      )
+      .join("");
+  }
+
   function renderCompareSummary() {
     el.compareSummary.innerHTML = state.compareData
       .map((item) => summaryItem(`${item.symbol}`, formatPercent(item.returnValue), item.name, item.returnValue))
       .join("");
+  }
+
+  function renderOptimizeSummary() {
+    const { results, best } = state.optimization;
+    if (!best) {
+      el.optimizeSummary.innerHTML = summaryItem("优化状态", "暂无结果", "请调整参数范围后运行");
+      el.optimizeTable.innerHTML = `<tr><td colspan="7">暂无有效参数组合</td></tr>`;
+      return;
+    }
+    const median = results[Math.floor(results.length / 2)];
+    el.optimizeSummary.innerHTML = [
+      summaryItem("最佳组合", `${best.fast} / ${best.slow}`, `Fast / Slow，样本 ${state.candles.length} 根K线`),
+      summaryItem("最佳收益", formatPercent(best.totalReturn), `回撤 ${formatPercent(metricValue(best, "maxDd", "maxDrawdown"))}`, best.totalReturn),
+      summaryItem("参数数量", `${results.length}`, `中位评分 ${median ? median.score.toFixed(3) : "--"}`),
+      summaryItem("交易次数", `${metricValue(best, "trades", "tradeCount") || 0}`, "MA 金叉买入，死叉卖出"),
+    ].join("");
+    el.optimizeTable.innerHTML = results
+      .slice(0, 12)
+      .map(
+        (item, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="numeric">${item.fast}</td>
+            <td class="numeric">${item.slow}</td>
+            <td class="numeric">${formatPercent(item.totalReturn)}</td>
+            <td class="numeric">${formatPercent(metricValue(item, "maxDd", "maxDrawdown"))}</td>
+            <td class="numeric">${metricValue(item, "trades", "tradeCount") || 0}</td>
+            <td class="numeric">${Number(item.score || 0).toFixed(3)}</td>
+          </tr>
+        `
+      )
+      .join("");
+  }
+
+  function renderBacktestSummary() {
+    const metrics = state.backtest.metrics || {};
+    const bt = state.backtest.summary || state.signals.strategy || {};
+    const totalReturn = metricValue(metrics, "totalReturn") ?? bt.totalReturn ?? 0;
+    const maxDd = metricValue(metrics, "maxDrawdown") ?? bt.maxDd ?? 0;
+    const tradeCount = metricValue(metrics, "tradeCount") ?? bt.trades ?? 0;
+    const winRate = metricValue(metrics, "winRate") ?? bt.winRate ?? 0;
+    el.backtestSummary.innerHTML = [
+      summaryItem("回测引擎", state.backtest.engine || "浏览器轻量回测", state.backtest.note || "基于当前信号规则"),
+      summaryItem("回测收益", formatPercent(totalReturn), `初始资金 ${intFmt.format(Number(el.initialCash.value) || 100000)}`, totalReturn),
+      summaryItem("最大回撤", formatPercent(maxDd), `${tradeCount} 笔交易`, maxDd),
+      summaryItem("胜率", formatPercent(winRate), state.backtest.error || "已计入手续费和滑点"),
+    ].join("");
+  }
+
+  function renderBacktestDetails() {
+    if (!el.backtestMetricTable || !el.backtestTradeTable) return;
+    const metrics = state.backtest.metrics || null;
+    if (!metrics) {
+      el.backtestMetricTable.innerHTML = `<tr><td colspan="3">运行专业回测后显示完整绩效指标</td></tr>`;
+      el.backtestTradeTable.innerHTML = `<tr><td colspan="8">暂无交易流水</td></tr>`;
+      return;
+    }
+    const metricRows = [
+      ["期末权益", formatCurrency(metrics.endingValue), "回测结束时的总资产"],
+      ["总收益率", formatPercent(metrics.totalReturn), "区间收益"],
+      ["年化收益率", formatPercent(metrics.annualizedReturn), "按当前频率折算"],
+      ["年化波动率", formatPercent(metrics.annualizedVolatility), "权益日收益波动"],
+      ["最大回撤", formatPercent(metrics.maxDrawdown), "从历史峰值到谷值的最大跌幅"],
+      ["Sharpe", formatNumber(metrics.sharpe), "收益风险比"],
+      ["Sortino", formatNumber(metrics.sortino), "仅惩罚下行波动"],
+      ["Calmar", formatNumber(metrics.calmar), "年化收益 / 最大回撤"],
+      ["交易次数", metrics.tradeCount ?? 0, "买入和卖出合计"],
+      ["完整买卖次数", metrics.roundTripCount ?? 0, "成对交易统计"],
+      ["胜率", formatPercent(metrics.winRate), "盈利完整交易占比"],
+      ["盈亏比", formatNumber(metrics.payoffRatio), "平均盈利 / 平均亏损"],
+      ["Profit Factor", metrics.profitFactor == null ? "--" : formatNumber(metrics.profitFactor), "总盈利 / 总亏损"],
+      ["平均持仓天数", formatNumber(metrics.averageHoldingBars), "按自然日估算"],
+      ["交易成本", formatCurrency(metrics.cost), "手续费 + 滑点"],
+    ];
+    el.backtestMetricTable.innerHTML = metricRows
+      .map(([label, value, note]) => `<tr><td>${label}</td><td class="numeric">${value}</td><td>${note}</td></tr>`)
+      .join("");
+
+    const trades = state.backtest.trades || [];
+    el.backtestTradeTable.innerHTML = trades.length
+      ? trades
+          .slice(-20)
+          .map(
+            (trade) => {
+              const normalized = normalizeTradeForView(trade);
+              return `
+                <tr>
+                  <td>${normalized.date}</td>
+                  <td>${normalized.sideLabel}</td>
+                  <td class="numeric">${formatNumber(normalized.price)}</td>
+                  <td class="numeric">${intFmt.format(normalized.shares || 0)}</td>
+                  <td class="numeric">${formatCurrency(normalized.turnover)}</td>
+                  <td class="numeric">${formatCurrency(normalized.commission)}</td>
+                  <td class="numeric">${formatCurrency(normalized.slippage)}</td>
+                  <td>${normalized.reason || "--"}</td>
+                </tr>
+              `;
+            }
+          )
+          .join("")
+      : `<tr><td colspan="8">该参数组合没有产生交易</td></tr>`;
+  }
+
+  function normalizeTradeForView(trade) {
+    const rawSide = String(trade.side || trade.position_effect || trade.positionEffect || "").toLowerCase();
+    const side = rawSide.includes("buy") || rawSide.includes("open") ? "buy" : rawSide.includes("sell") || rawSide.includes("close") ? "sell" : "";
+    const price = Number(trade.price ?? trade.last_price ?? trade.lastPrice ?? 0);
+    const shares = Number(trade.shares ?? trade.last_quantity ?? trade.lastQuantity ?? trade.quantity ?? 0);
+    const turnover = Number(trade.turnover ?? price * shares);
+    const date = String(trade.date || trade.trading_datetime || trade.datetime || "").slice(0, 10);
+    return {
+      date,
+      side,
+      sideLabel: side === "buy" ? "买入" : side === "sell" ? "卖出" : "--",
+      price,
+      shares,
+      turnover,
+      commission: Number(trade.commission || 0),
+      slippage: Number(trade.slippage || 0),
+      reason: trade.reason || trade.order_book_id || trade.orderBookId || "",
+    };
+  }
+
+  function metricValue(source, ...keys) {
+    for (const key of keys) {
+      if (source && source[key] != null && Number.isFinite(Number(source[key]))) return Number(source[key]);
+    }
+    return null;
+  }
+
+  function renderTemplateMarket() {
+    el.templateMarket.innerHTML = MARKET_TEMPLATES.map(
+      (item) => `
+        <article class="template-card">
+          <span>${item.tag}</span>
+          <strong>${item.name}</strong>
+          <p>${item.desc}</p>
+          <footer>
+            <button class="primary-button" data-template-market="${item.id}">应用</button>
+            <button class="ghost-button" data-preview-template="${item.id}">预览</button>
+          </footer>
+        </article>
+      `
+    ).join("");
+  }
+
+  function renderAiBrief() {
+    const cards = state.aiCards.length ? state.aiCards : buildAiCards();
+    el.aiBrief.innerHTML = cards
+      .map((card) => `<article class="ai-card"><span>${card.tag}</span><strong>${card.title}</strong><p>${card.body}</p></article>`)
+      .join("");
+  }
+
+  function buildAiCards() {
+    const stats = state.stats || {};
+    const lastSignal = state.signals.events.at(-1);
+    const best = state.optimization.best;
+    return [
+      {
+        tag: "市场状态",
+        title: stats.totalReturn >= 0 ? "区间偏强" : "区间承压",
+        body: `当前样本区间收益为 ${formatPercent(stats.totalReturn || 0)}，最大回撤为 ${formatPercent(stats.maxDd || 0)}。先观察趋势结构，再决定是否提高信号确认强度。`,
+      },
+      {
+        tag: "信号解释",
+        title: lastSignal ? `${lastSignal.date} ${lastSignal.type === "buy" ? "买入" : "卖出"}信号` : "暂无确认信号",
+        body: lastSignal ? `触发原因：${lastSignal.reasons.join("、")}。建议结合成交量和波动状态复核，避免只看单个指标。` : "当前参数组合没有形成确认信号，可降低阈值或切换模板进行对比。",
+      },
+      {
+        tag: "策略草稿",
+        title: best ? `MA ${best.fast}/${best.slow}` : "等待参数扫描",
+        body: best ? `参数扫描中该组合评分较高，收益 ${formatPercent(best.totalReturn)}，回撤 ${formatPercent(metricValue(best, "maxDd", "maxDrawdown"))}。下一步适合用 RQAlpha Plus 做数据包撮合验证。` : "运行优化后，可把最佳参数写入策略草稿，再进入回测视图验证。",
+      },
+    ];
+  }
+
+  async function generateAiExplanation() {
+    try {
+      const response = await fetch(`${backendBaseUrl()}/api/ai/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: state.symbol,
+          stats: state.stats,
+          signals: state.signals.strategy,
+          backtest: state.backtest,
+          optimization: state.optimization,
+          strategyParams: strategyPayload().strategyParams,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+      state.aiCards = payload.cards || buildAiCards();
+      if (payload.draft) {
+        el.strategyDraft.textContent = payload.draft;
+      }
+      renderAiBrief();
+      setStatus("已生成 AI 研究解释");
+    } catch (error) {
+      state.aiCards = buildAiCards();
+      renderAiBrief();
+      setStatus(`已生成本地规则解释：${error.message}`);
+    }
+  }
+
+  function renderProjectPanel() {
+    const projects = loadProjects();
+    state.projects = projects;
+    const current = projects.filter((item) => item.name === el.projectNameInput.value.trim());
+    const best = current.slice().sort((a, b) => (b.returnValue || 0) - (a.returnValue || 0))[0];
+    el.projectSummary.innerHTML = [
+      summaryItem("项目数", `${new Set(projects.map((item) => item.name)).size}`, "localStorage 本地保存"),
+      summaryItem("实验数", `${projects.length}`, `当前项目 ${current.length} 条`),
+      summaryItem("最近收益", projects[0] ? formatPercent(projects[0].returnValue) : "--", projects[0]?.symbol || "暂无实验", projects[0]?.returnValue),
+      summaryItem("版本对比", best ? formatPercent(best.returnValue) : "版本不足", best ? `当前最佳 ${best.time}` : "保存多次实验后可比较", best?.returnValue),
+    ].join("");
+    el.experimentTable.innerHTML = projects.slice(0, 30).map(
+      (item) => `
+        <tr data-experiment-id="${item.id}">
+          <td>${item.time}</td>
+          <td>${item.name}</td>
+          <td>${item.symbol}</td>
+          <td>${item.engine || item.source}</td>
+          <td class="numeric">${formatPercent(item.returnValue)}</td>
+          <td class="numeric">${formatPercent(item.maxDd)}</td>
+          <td>${item.template || "自定义"} ${item.strategyParams ? `MA ${item.strategyParams.fast_window}/${item.strategyParams.slow_window}` : ""}</td>
+        </tr>
+      `
+    ).join("") || `<tr><td colspan="7">暂无实验历史</td></tr>`;
   }
 
   function renderResearchBrief() {
@@ -923,8 +1422,21 @@
   }
 
   function formatPercent(value) {
-    if (!Number.isFinite(value)) return "--";
-    return `${(value * 100).toFixed(2)}%`;
+    const next = Number(value);
+    if (!Number.isFinite(next)) return "--";
+    return `${(next * 100).toFixed(2)}%`;
+  }
+
+  function formatNumber(value, digits = 2) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return "--";
+    return next.toFixed(digits);
+  }
+
+  function formatCurrency(value) {
+    const next = Number(value);
+    if (!Number.isFinite(next)) return "--";
+    return fmt.format(next);
   }
 
   function resizeCanvas() {
@@ -951,6 +1463,11 @@
 
     if (state.mode === "compare") {
       drawCompareCanvas(width, height);
+      return;
+    }
+
+    if (state.mode === "optimize") {
+      drawOptimizationCanvas(width, height);
       return;
     }
 
@@ -1060,8 +1577,9 @@
       .filter((indicator) => indicator.visible && ["MA", "EMA", "BOLL"].includes(indicator.type))
       .forEach((indicator) => drawMainIndicator(indicator, panel, visible, toX, toY));
 
-    if (state.mode === "signals") {
+    if (state.mode === "signals" || state.mode === "backtest") {
       drawSignalMarkers(panel, visible, toX, toY);
+      drawBacktestTradeMarkers(panel, visible, toX, toY);
     }
 
     drawPanelTitle(panel, "价格");
@@ -1115,21 +1633,22 @@
     const events = state.signals.events.filter(
       (event) => event.index >= state.visibleStart && event.index < state.visibleEnd
     );
+    const labeled = new Set(events.slice(-6).map((event) => event.index));
     events.forEach((event) => {
       const offset = event.index - state.visibleStart;
       const row = state.candles[event.index];
       const x = toX(offset);
-      const baseY = event.type === "buy" ? toY(row.low) + 12 : toY(row.high) - 12;
+      const baseY = toY(event.price || row.close);
       ctx.beginPath();
       if (event.type === "buy") {
-        ctx.moveTo(x, baseY - 12);
-        ctx.lineTo(x - 7, baseY);
-        ctx.lineTo(x + 7, baseY);
+        ctx.moveTo(x, baseY - 8);
+        ctx.lineTo(x - 6, baseY + 5);
+        ctx.lineTo(x + 6, baseY + 5);
         ctx.fillStyle = "#d94a38";
       } else {
-        ctx.moveTo(x, baseY + 12);
-        ctx.lineTo(x - 7, baseY);
-        ctx.lineTo(x + 7, baseY);
+        ctx.moveTo(x, baseY + 8);
+        ctx.lineTo(x - 6, baseY - 5);
+        ctx.lineTo(x + 6, baseY - 5);
         ctx.fillStyle = "#1f9d72";
       }
       ctx.closePath();
@@ -1137,7 +1656,85 @@
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 1.5;
       ctx.stroke();
+      if (labeled.has(event.index)) {
+        drawMarkerLabel(
+          panel,
+          x,
+          baseY,
+          event.type === "buy" ? "买" : "卖",
+          event.reasons?.[0] || "信号",
+          event.type === "buy" ? "#d94a38" : "#12805c"
+        );
+      }
     });
+  }
+
+  function drawBacktestTradeMarkers(panel, visible, toX, toY) {
+    const trades = state.backtest.trades || [];
+    if (!trades.length) return;
+    const indexByDate = new Map(state.candles.map((row, index) => [row.date, index]));
+    const visibleTrades = trades
+      .map((trade) => ({ raw: trade, normalized: normalizeTradeForView(trade) }))
+      .filter((item) => {
+        const index = indexByDate.get(item.normalized.date);
+        return index != null && index >= state.visibleStart && index < state.visibleEnd;
+      });
+    const labeledDates = new Set(visibleTrades.slice(-6).map((item) => item.normalized.date + item.normalized.side));
+    visibleTrades.forEach(({ normalized }) => {
+      const index = indexByDate.get(normalized.date);
+      if (index == null || index < state.visibleStart || index >= state.visibleEnd) return;
+      const offset = index - state.visibleStart;
+      const row = state.candles[index];
+      const x = toX(offset);
+      const y = toY(normalized.price || row.close);
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = normalized.side === "buy" ? "#a61b1b" : "#047857";
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      if (labeledDates.has(normalized.date + normalized.side)) {
+        drawMarkerLabel(
+          panel,
+          x,
+          y,
+          normalized.side === "buy" ? "成买" : "成卖",
+          `${formatNumber(normalized.price)} · ${intFmt.format(normalized.shares || 0)}股`,
+          normalized.side === "buy" ? "#a61b1b" : "#047857"
+        );
+      }
+    });
+  }
+
+  function drawMarkerLabel(panel, x, y, title, detail, color) {
+    const text = `${title} ${detail}`;
+    ctx.save();
+    ctx.font = "11px sans-serif";
+    const width = Math.min(ctx.measureText(text).width + 14, 150);
+    const labelX = clamp(x + 8, panel.x + 4, panel.x + panel.w - width - 4);
+    const labelY = clamp(y - 28, panel.y + 4, panel.y + panel.h - 24);
+    ctx.fillStyle = "rgba(255,255,255,0.94)";
+    roundRect(labelX, labelY, width, 22, 5);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text.length > 18 ? `${text.slice(0, 17)}…` : text, labelX + 7, labelY + 11);
+    ctx.restore();
+  }
+
+  function roundRect(x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + width, y, x + width, y + height, radius);
+    ctx.arcTo(x + width, y + height, x, y + height, radius);
+    ctx.arcTo(x, y + height, x, y, radius);
+    ctx.arcTo(x, y, x + width, y, radius);
+    ctx.closePath();
   }
 
   function drawCompareCanvas(width, height) {
@@ -1197,6 +1794,77 @@
       const index = Math.round((dates.length - 1) * (i / Math.max(1, ticks - 1)));
       ctx.fillText(dates[index].date.slice(5), toX(index, dates.length), panel.y + panel.h + 12);
     }
+  }
+
+  function drawOptimizationCanvas(width, height) {
+    const panel = { x: 72, y: 26, w: width - 112, h: height - 90 };
+    const results = state.optimization.results || [];
+    if (!results.length) {
+      drawEmpty(width, height, "暂无优化结果");
+      return;
+    }
+
+    drawSinglePanelGrid(panel);
+    const fastValues = [...new Set(results.map((item) => item.fast))].sort((a, b) => a - b);
+    const slowValues = [...new Set(results.map((item) => item.slow))].sort((a, b) => a - b);
+    const scoreValues = results.map((item) => item.score);
+    const minScore = Math.min(...scoreValues);
+    const maxScore = Math.max(...scoreValues);
+    const cellW = panel.w / Math.max(1, slowValues.length);
+    const cellH = panel.h / Math.max(1, fastValues.length);
+    const byKey = new Map(results.map((item) => [`${item.fast}:${item.slow}`, item]));
+
+    fastValues.forEach((fast, row) => {
+      slowValues.forEach((slow, col) => {
+        const item = byKey.get(`${fast}:${slow}`);
+        if (!item) return;
+        const ratio = (item.score - minScore) / (maxScore - minScore || 1);
+        ctx.fillStyle = heatColor(ratio);
+        ctx.fillRect(panel.x + col * cellW, panel.y + row * cellH, Math.ceil(cellW), Math.ceil(cellH));
+      });
+    });
+
+    const best = state.optimization.best;
+    if (best) {
+      const bestCol = slowValues.indexOf(best.slow);
+      const bestRow = fastValues.indexOf(best.fast);
+      ctx.strokeStyle = "#17212b";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(panel.x + bestCol * cellW + 1, panel.y + bestRow * cellH + 1, cellW - 2, cellH - 2);
+    }
+
+    ctx.fillStyle = "#16212e";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("MA 参数评分热力图", panel.x, panel.y - 18);
+    ctx.fillStyle = "#687386";
+    ctx.textAlign = "center";
+    slowValues.forEach((slow, col) => {
+      if (col % Math.max(1, Math.ceil(slowValues.length / 8)) === 0) {
+        ctx.fillText(String(slow), panel.x + col * cellW + cellW / 2, panel.y + panel.h + 12);
+      }
+    });
+    ctx.textAlign = "right";
+    fastValues.forEach((fast, row) => {
+      if (row % Math.max(1, Math.ceil(fastValues.length / 8)) === 0) {
+        ctx.fillText(String(fast), panel.x - 8, panel.y + row * cellH + cellH / 2 - 6);
+      }
+    });
+    ctx.textAlign = "left";
+    ctx.fillText("Slow", panel.x + panel.w - 30, panel.y + panel.h + 32);
+    ctx.save();
+    ctx.translate(panel.x - 48, panel.y + 22);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText("Fast", 0, 0);
+    ctx.restore();
+  }
+
+  function heatColor(ratio) {
+    const r = Math.round(31 + ratio * 186);
+    const g = Math.round(157 - ratio * 83);
+    const b = Math.round(114 - ratio * 56);
+    return `rgb(${r}, ${g}, ${b})`;
   }
 
   function drawSinglePanelGrid(panel) {
@@ -1364,8 +2032,14 @@
     ctx.textBaseline = "middle";
     [max, (max + min) / 2, min].forEach((value, index) => {
       const y = panel.y + (panel.h / 2) * index;
-      ctx.fillText(typeof formatter === "function" ? formatter(value) : value, panel.x - 8, y);
+      ctx.fillText(formatAxisValue(value, formatter), panel.x + panel.w - 8, y);
     });
+  }
+
+  function formatAxisValue(value, formatter) {
+    if (typeof formatter === "function") return formatter(value);
+    if (formatter && typeof formatter.format === "function") return formatter.format(value);
+    return String(value);
   }
 
   function drawPanelTitle(panel, title) {
@@ -1472,6 +2146,11 @@
     });
     el.signalsPanel.classList.toggle("hidden", mode !== "signals");
     el.comparePanel.classList.toggle("hidden", mode !== "compare");
+    el.optimizePanel.classList.toggle("hidden", mode !== "optimize");
+    el.backtestPanel.classList.toggle("hidden", mode !== "backtest");
+    el.templatesPanel.classList.toggle("hidden", mode !== "templates");
+    el.aiPanel.classList.toggle("hidden", mode !== "ai");
+    el.projectsPanel.classList.toggle("hidden", mode !== "projects");
     el.researchPanel.classList.toggle("hidden", mode !== "research");
     el.tooltip.classList.add("hidden");
     draw();
@@ -1485,9 +2164,230 @@
       id: `${indicator.id}-${Date.now()}`,
     }));
     renderIndicatorList();
+    applyTemplateStrategyParams(templateName);
     recomputeAndDraw();
     const label = templateName === "trend" ? "趋势" : templateName === "momentum" ? "动量" : "波动";
     setStatus(`已应用${label}模板`);
+  }
+
+  function applyTemplateStrategyParams(templateName) {
+    const template = MARKET_TEMPLATES.find((item) => item.id === templateName);
+    if (!template?.strategy) return;
+    el.strategyFastWindow.value = template.strategy.fast;
+    el.strategySlowWindow.value = template.strategy.slow;
+    el.targetWeight.value = template.strategy.targetWeight;
+  }
+
+  async function checkBackend() {
+    try {
+      const response = await fetch(`${backendBaseUrl()}/api/health`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || response.statusText);
+      state.backend = { ok: true, providers: payload.providers || {}, message: payload.message || "已连接" };
+      setStatus(`本地服务已连接：${Object.keys(state.backend.providers).filter((k) => state.backend.providers[k]).join(" / ") || "可用"}`);
+    } catch (error) {
+      state.backend = { ok: false, providers: {}, message: error.message };
+      setStatus(`本地服务未连接：${error.message}`);
+    }
+  }
+
+  async function runBacktest() {
+    if (el.backtestEngine.value === "python" || el.backtestEngine.value === "rqalpha") {
+      try {
+        const response = await fetch(`${backendBaseUrl()}/api/backtest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(strategyPayload({ engine: el.backtestEngine.value })),
+        });
+        const payload = await response.json();
+        if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+        state.backtest = payload;
+        setStatus(`回测完成：${payload.engine}`);
+        renderBacktestSummary();
+        renderBacktestDetails();
+        return;
+      } catch (error) {
+        state.backtest = runLocalBacktest(`本地 Python 服务不可用，已回退浏览器轻量回测：${error.message}`);
+      }
+    } else {
+      state.backtest = runLocalBacktest("浏览器内置轻量回测");
+    }
+    renderBacktestSummary();
+    renderBacktestDetails();
+    setStatus("轻量回测完成");
+  }
+
+  function strategyPayload(extra = {}) {
+    return {
+      symbol: state.symbol,
+      start: el.startDate.value,
+      end: el.endDate.value,
+      frequency: el.frequencySelect.value,
+      adjust: el.adjustSelect.value,
+      initialCash: Number(el.initialCash.value) || 100000,
+      strategy: el.strategySelect.value || "ma_cross",
+      strategyParams: {
+        fast_window: cleanPeriod(el.strategyFastWindow.value, 5),
+        slow_window: cleanPeriod(el.strategySlowWindow.value, 20),
+        target_weight: clamp(Number(el.targetWeight.value) || 0.95, 0.1, 1),
+      },
+      targetWeight: clamp(Number(el.targetWeight.value) || 0.95, 0.1, 1),
+      commissionBps: Number(el.feeBps.value) || 0,
+      slippageBps: Number(el.slippageBps.value) || 0,
+      minCommission: Number(el.minCommission.value) || 0,
+      tradePrice: "next_open",
+      candles: state.candles,
+      ...extra,
+    };
+  }
+
+  function runLocalBacktest(note) {
+    const fast = cleanPeriod(el.strategyFastWindow.value, 5);
+    const slow = cleanPeriod(el.strategySlowWindow.value, 20);
+    const summary = simulateMaStrategy(fast, slow);
+    return {
+      engine: "local",
+      note,
+      summary: {
+        totalReturn: summary.totalReturn || 0,
+        maxDd: summary.maxDd || 0,
+        trades: summary.trades || 0,
+        winRate: summary.winRate || 0,
+      },
+    };
+  }
+
+  async function runStrategyOptimize() {
+    try {
+      setStatus("正在运行 Python 参数扫描...");
+      const response = await fetch(`${backendBaseUrl()}/api/optimize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          strategyPayload({
+            fastStart: Number(el.optFastStart.value) || 3,
+            fastEnd: Number(el.optFastEnd.value) || 18,
+            slowStart: Number(el.optSlowStart.value) || 20,
+            slowEnd: Number(el.optSlowEnd.value) || 80,
+            step: Number(el.optStep.value) || 5,
+            objective: "sharpe",
+          })
+        ),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || response.statusText);
+      const results = (payload.results || []).map((item) => ({
+        ...item,
+        maxDd: item.maxDrawdown,
+        trades: item.tradeCount,
+      }));
+      state.optimization = { results, best: results[0] || null };
+      renderOptimizeSummary();
+      setMode("optimize");
+      setStatus(`参数扫描完成：${payload.engine}`);
+    } catch (error) {
+      setStatus(`参数扫描失败：${error.message}`);
+    }
+  }
+
+  function generateStrategyDraft() {
+    const best = state.optimization.best || {
+      fast: cleanPeriod(el.strategyFastWindow.value, 5),
+      slow: cleanPeriod(el.strategySlowWindow.value, 20),
+    };
+    const code = `# AI Quant Lab 策略草稿：MA 双均线
+# 来源：Indicator Studio 当前研究配置
+
+from rqalpha.api import order_target_percent, history_bars
+
+
+def init(context):
+    context.symbol = "${state.symbol}"
+    context.fast = ${best.fast}
+    context.slow = ${best.slow}
+    context.target_weight = ${clamp(Number(el.targetWeight.value) || 0.95, 0.1, 1)}
+
+
+def handle_bar(context, bar_dict):
+    closes = history_bars(context.symbol, context.slow + 2, "1d", "close")
+    if closes is None or len(closes) < context.slow:
+        return
+    fast_ma = closes[-context.fast:].mean()
+    slow_ma = closes[-context.slow:].mean()
+    prev_fast = closes[-context.fast - 1:-1].mean()
+    prev_slow = closes[-context.slow - 1:-1].mean()
+
+    if prev_fast <= prev_slow and fast_ma > slow_ma:
+        order_target_percent(context.symbol, context.target_weight)
+    elif prev_fast >= prev_slow and fast_ma < slow_ma:
+        order_target_percent(context.symbol, 0)
+`;
+    el.strategyDraft.textContent = code;
+    el.strategyDraft.classList.remove("hidden");
+    return code;
+  }
+
+  function saveExperiment() {
+    const projects = loadProjects();
+    const name = el.projectNameInput.value.trim() || "默认研究项目";
+    const metrics = state.backtest.metrics || {};
+    const item = {
+      id: `exp-${Date.now()}`,
+      time: new Date().toLocaleString("zh-CN", { hour12: false }),
+      name,
+      symbol: state.symbol,
+      source: state.sourceLabel,
+      engine: state.backtest.engine || "chart",
+      returnValue: metricValue(metrics, "totalReturn") ?? state.stats.totalReturn ?? 0,
+      maxDd: metricValue(metrics, "maxDrawdown") ?? state.stats.maxDd ?? 0,
+      template: inferTemplateName(),
+      config: getConfig(),
+      stats: state.stats,
+      signals: state.signals.strategy,
+      backtest: state.backtest,
+      strategyParams: strategyPayload().strategyParams,
+      optimization: state.optimization.best,
+    };
+    projects.unshift(item);
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(projects.slice(0, 120)));
+    renderProjectPanel();
+    setStatus(`已保存实验：${name}`);
+  }
+
+  function loadProjects() {
+    try {
+      return JSON.parse(localStorage.getItem(PROJECT_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  function loadLatestProject() {
+    const name = el.projectNameInput.value.trim();
+    const item = loadProjects().find((project) => !name || project.name === name);
+    if (!item) {
+      setStatus("没有可加载的项目实验");
+      return;
+    }
+    applyConfig(item.config);
+    setStatus(`已加载实验版本：${item.name} / ${item.time}`);
+  }
+
+  function deleteProject() {
+    const name = el.projectNameInput.value.trim();
+    if (!name) return;
+    const next = loadProjects().filter((project) => project.name !== name);
+    localStorage.setItem(PROJECT_KEY, JSON.stringify(next));
+    renderProjectPanel();
+    setStatus(`已删除项目：${name}`);
+  }
+
+  function inferTemplateName() {
+    const types = state.indicators.filter((item) => item.visible).map((item) => item.type).sort().join(",");
+    if (types.includes("MACD") && types.includes("EMA")) return "趋势跟随";
+    if (types.includes("KDJ") && types.includes("RSI")) return "动量反转";
+    if (types.includes("ATR")) return "波动风险";
+    return "自定义";
   }
 
   function indicatorSummary(indicator) {
@@ -1554,15 +2454,13 @@
   }
 
   function renderColorFields(indicator, count) {
-    let html = "";
+    let html = `<label class="wide color-row-label"><span>颜色</span><div class="color-row">`;
     for (let i = 0; i < count; i += 1) {
       html += `
-        <label>颜色 ${i + 1}
-          <input type="color" data-color="${i}" value="${indicator.colors[i] || "#1f6feb"}" />
-        </label>
+        <input type="color" data-color="${i}" value="${indicator.colors[i] || "#1f6feb"}" title="颜色 ${i + 1}" />
       `;
     }
-    return html;
+    return `${html}</div></label>`;
   }
 
   function escapeAttr(value) {
@@ -1650,6 +2548,8 @@
   function getConfig() {
     return {
       symbol: state.symbol,
+      dataSource: el.dataSourceSelect.value,
+      backendUrl: el.backendUrlInput.value,
       startDate: el.startDate.value,
       endDate: el.endDate.value,
       frequency: el.frequencySelect.value,
@@ -1662,13 +2562,32 @@
         rsiHigh: el.rsiHigh.value,
         feeBps: el.feeBps.value,
       },
+      optimize: {
+        fastStart: el.optFastStart.value,
+        fastEnd: el.optFastEnd.value,
+        slowStart: el.optSlowStart.value,
+        slowEnd: el.optSlowEnd.value,
+        step: el.optStep.value,
+      },
+      strategy: {
+        engine: el.backtestEngine.value,
+        name: el.strategySelect.value,
+        fastWindow: el.strategyFastWindow.value,
+        slowWindow: el.strategySlowWindow.value,
+        targetWeight: el.targetWeight.value,
+        initialCash: el.initialCash.value,
+        slippageBps: el.slippageBps.value,
+        minCommission: el.minCommission.value,
+      },
       compareSymbols: state.compareSymbols,
       indicators: state.indicators,
     };
   }
 
   function applyConfig(config) {
-    if (config.symbol && STOCKS[config.symbol]) el.symbolSelect.value = config.symbol;
+    if (config.symbol) el.symbolInput.value = config.symbol;
+    if (config.dataSource) el.dataSourceSelect.value = config.dataSource;
+    if (config.backendUrl) el.backendUrlInput.value = config.backendUrl;
     if (config.startDate) el.startDate.value = config.startDate;
     if (config.endDate) el.endDate.value = config.endDate;
     if (config.frequency) el.frequencySelect.value = config.frequency;
@@ -1679,11 +2598,28 @@
       if (config.signal.rsiHigh) el.rsiHigh.value = config.signal.rsiHigh;
       if (config.signal.feeBps) el.feeBps.value = config.signal.feeBps;
     }
+    if (config.optimize) {
+      if (config.optimize.fastStart) el.optFastStart.value = config.optimize.fastStart;
+      if (config.optimize.fastEnd) el.optFastEnd.value = config.optimize.fastEnd;
+      if (config.optimize.slowStart) el.optSlowStart.value = config.optimize.slowStart;
+      if (config.optimize.slowEnd) el.optSlowEnd.value = config.optimize.slowEnd;
+      if (config.optimize.step) el.optStep.value = config.optimize.step;
+    }
+    if (config.strategy) {
+      if (config.strategy.engine) el.backtestEngine.value = config.strategy.engine;
+      if (config.strategy.name) el.strategySelect.value = config.strategy.name;
+      if (config.strategy.fastWindow) el.strategyFastWindow.value = config.strategy.fastWindow;
+      if (config.strategy.slowWindow) el.strategySlowWindow.value = config.strategy.slowWindow;
+      if (config.strategy.targetWeight) el.targetWeight.value = config.strategy.targetWeight;
+      if (config.strategy.initialCash) el.initialCash.value = config.strategy.initialCash;
+      if (config.strategy.slippageBps) el.slippageBps.value = config.strategy.slippageBps;
+      if (config.strategy.minCommission) el.minCommission.value = config.strategy.minCommission;
+    }
     if (Array.isArray(config.compareSymbols)) state.compareSymbols = config.compareSymbols;
     if (Array.isArray(config.indicators)) state.indicators = clone(config.indicators);
     renderIndicatorList();
     renderCompareSymbols();
-    loadGeneratedData();
+    loadData();
     if (config.mode) setMode(config.mode);
   }
 
@@ -1780,7 +2716,91 @@
     reader.readAsText(file);
   }
 
+  function handleConfigFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const config = JSON.parse(String(reader.result || "{}"));
+        applyConfig(config);
+        setStatus(`已导入配置：${file.name}`);
+      } catch (error) {
+        setStatus(`配置导入失败：${error.message}`);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function downloadTextFile(filename, text, type = "text/plain") {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadCurrentCsv() {
+    const header = "date,open,high,low,close,volume";
+    const rows = state.candles.map((row) =>
+      [row.date, row.open, row.high, row.low, row.close, row.volume].join(",")
+    );
+    const filename = `${state.symbol || "indicator-studio"}-${el.frequencySelect.value}.csv`;
+    downloadTextFile(filename, [header, ...rows].join("\n"), "text/csv");
+    setStatus(`已下载 CSV：${filename}`);
+  }
+
+  function encodeConfig(config) {
+    const json = JSON.stringify(config);
+    const bytes = new TextEncoder().encode(json);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary);
+  }
+
+  function decodeConfig(payload) {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  async function shareConfigLink() {
+    const url = new URL(window.location.href);
+    url.hash = `config=${encodeConfig(getConfig())}`;
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setStatus("分享链接已复制到剪贴板");
+    } catch {
+      window.prompt("复制分享链接", url.toString());
+    }
+  }
+
+  function loadConfigFromHash() {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash.startsWith("config=")) return false;
+    try {
+      const config = decodeConfig(hash.slice("config=".length));
+      applyConfig(config);
+      setStatus("已从分享链接恢复研究配置");
+      return true;
+    } catch {
+      setStatus("分享链接中的配置无法解析");
+      return false;
+    }
+  }
+
   function updateHover(event) {
+    if (state.mode === "compare" || state.mode === "optimize") {
+      clearHover();
+      return;
+    }
     const rect = el.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -1802,12 +2822,20 @@
     if (!row) return;
     const change = row.close - row.open;
     const pct = row.open ? (change / row.open) * 100 : 0;
+    const signal = signalAtIndex(state.hoverIndex);
+    const trade = tradeAtDate(row.date);
+    const signalHtml = signal
+      ? `<br><span class="tip-signal">${signal.type === "buy" ? "买入信号" : "卖出信号"}：${signal.reasons.join("、")}</span>`
+      : "";
+    const tradeHtml = trade
+      ? `<br><span class="tip-signal">成交：${trade.sideLabel} ${formatNumber(trade.price)} / ${intFmt.format(trade.shares || 0)}股</span>`
+      : "";
     el.tooltip.innerHTML = `
       <b>${row.date}</b>
       开 ${fmt.format(row.open)}　高 ${fmt.format(row.high)}<br>
       低 ${fmt.format(row.low)}　收 ${fmt.format(row.close)}<br>
       涨跌 ${fmt.format(change)} (${pct.toFixed(2)}%)<br>
-      成交量 ${shortNumber(row.volume)}
+      成交量 ${shortNumber(row.volume)}${signalHtml}${tradeHtml}
     `;
     const wrap = el.canvas.parentElement.getBoundingClientRect();
     const left = event.clientX - wrap.left;
@@ -1815,7 +2843,22 @@
     el.tooltip.style.left = `${Math.min(left + 14, wrap.width - 230)}px`;
     el.tooltip.style.top = `${Math.min(top + 14, wrap.height - 120)}px`;
     el.tooltip.classList.remove("hidden");
-    el.cursorText.textContent = `${row.date} 收盘 ${fmt.format(row.close)} 成交量 ${shortNumber(row.volume)}`;
+    el.cursorText.textContent = [
+      `${row.date} 收盘 ${fmt.format(row.close)} 成交量 ${shortNumber(row.volume)}`,
+      signal ? `${signal.type === "buy" ? "买入" : "卖出"}信号：${signal.reasons[0] || "规则触发"}` : "",
+      trade ? `成交：${trade.sideLabel} ${formatNumber(trade.price)}` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  function signalAtIndex(index) {
+    return state.signals.events.find((event) => event.index === index) || null;
+  }
+
+  function tradeAtDate(date) {
+    const item = (state.backtest.trades || [])
+      .map((trade) => normalizeTradeForView(trade))
+      .find((trade) => trade.date === date);
+    return item || null;
   }
 
   function clearHover() {
@@ -1845,7 +2888,8 @@
   }
 
   function bindEvents() {
-    el.loadDataBtn.addEventListener("click", loadGeneratedData);
+    el.loadDataBtn.addEventListener("click", loadData);
+    el.checkBackendBtn.addEventListener("click", checkBackend);
     el.resetViewBtn.addEventListener("click", resetView);
     el.addIndicatorBtn.addEventListener("click", () => addIndicator(el.indicatorTypeSelect.value));
     el.applyParamsBtn.addEventListener("click", recomputeAndDraw);
@@ -1857,6 +2901,66 @@
     });
     [el.signalProfile, el.rsiLow, el.rsiHigh, el.feeBps].forEach((input) => {
       input.addEventListener("input", recomputeAndDraw);
+    });
+    [el.optFastStart, el.optFastEnd, el.optSlowStart, el.optSlowEnd, el.optStep].forEach((input) => {
+      input.addEventListener("input", recomputeAndDraw);
+    });
+    el.runOptimizeBtn.addEventListener("click", () => {
+      updateAnalytics();
+      setMode("optimize");
+      setStatus("参数优化已完成");
+    });
+    el.openStrategyBtn.addEventListener("click", () => {
+      setMode("backtest");
+      setStatus("已进入策略验证");
+    });
+    el.collapseIndicatorsBtn.addEventListener("click", () => {
+      el.workspace.classList.toggle("sidebar-collapsed");
+      const collapsed = el.workspace.classList.contains("sidebar-collapsed");
+      el.collapseIndicatorsBtn.title = collapsed ? "展开指标面板" : "收起指标面板";
+      setTimeout(resizeCanvas, 190);
+    });
+    el.runBacktestBtn.addEventListener("click", runBacktest);
+    el.runStrategyOptimizeBtn.addEventListener("click", runStrategyOptimize);
+    el.generateStrategyBtn.addEventListener("click", generateStrategyDraft);
+    el.explainBtn.addEventListener("click", generateAiExplanation);
+    el.draftFromAiBtn.addEventListener("click", () => {
+      generateStrategyDraft();
+      setMode("backtest");
+      setStatus("已生成策略草稿");
+    });
+    el.saveProjectBtn.addEventListener("click", saveExperiment);
+    el.loadProjectBtn.addEventListener("click", loadLatestProject);
+    el.deleteProjectBtn.addEventListener("click", deleteProject);
+    el.experimentTable.addEventListener("click", (event) => {
+      const row = event.target.closest("tr[data-experiment-id]");
+      if (!row) return;
+      const item = loadProjects().find((project) => project.id === row.dataset.experimentId);
+      if (!item) return;
+      applyConfig(item.config);
+      if (item.backtest) state.backtest = item.backtest;
+      renderBacktestSummary();
+      renderBacktestDetails();
+      setStatus(`已加载实验版本：${item.name} / ${item.time}`);
+    });
+    el.templateMarket.addEventListener("click", (event) => {
+      const applyButton = event.target.closest("[data-template-market]");
+      const previewButton = event.target.closest("[data-preview-template]");
+      if (applyButton) {
+        applyIndicatorTemplate(applyButton.dataset.templateMarket);
+        setMode("chart");
+      }
+      if (previewButton) {
+        state.aiCards = [
+          {
+            tag: "模板预览",
+            title: MARKET_TEMPLATES.find((item) => item.id === previewButton.dataset.previewTemplate)?.name || "模板",
+            body: MARKET_TEMPLATES.find((item) => item.id === previewButton.dataset.previewTemplate)?.desc || "",
+          },
+        ];
+        renderAiBrief();
+        setMode("ai");
+      }
     });
     el.compareSymbols.addEventListener("change", () => {
       state.compareSymbols = Array.from(el.compareSymbols.querySelectorAll("input:checked")).map((input) => input.value);
@@ -1871,6 +2975,10 @@
     el.csvInput.addEventListener("change", (event) => {
       const [file] = event.target.files;
       if (file) handleCsv(file);
+    });
+    el.configInput.addEventListener("change", (event) => {
+      const [file] = event.target.files;
+      if (file) handleConfigFile(file);
     });
     el.savePresetBtn.addEventListener("click", () => {
       const name = window.prompt("请输入配置名称", el.presetSelect.value || "默认指标模板");
@@ -1900,13 +3008,16 @@
     });
     el.exportConfigBtn.addEventListener("click", async () => {
       const json = JSON.stringify(getConfig(), null, 2);
+      downloadTextFile(`indicator-studio-config-${formatDate(new Date())}.json`, json, "application/json");
       try {
         await navigator.clipboard.writeText(json);
-        setStatus("当前配置 JSON 已复制到剪贴板");
+        setStatus("当前配置 JSON 已下载并复制到剪贴板");
       } catch {
-        window.alert(json);
+        setStatus("当前配置 JSON 已下载");
       }
     });
+    el.shareConfigBtn.addEventListener("click", shareConfigLink);
+    el.downloadCsvBtn.addEventListener("click", downloadCurrentCsv);
     el.canvas.addEventListener("mousemove", updateHover);
     el.canvas.addEventListener("mouseleave", clearHover);
     el.canvas.addEventListener("wheel", onWheel, { passive: false });
@@ -1924,9 +3035,12 @@
     initDates();
     renderIndicatorList();
     renderCompareSymbols();
+    renderTemplateMarket();
+    renderProjectPanel();
     refreshPresetSelect();
     bindEvents();
-    loadGeneratedData();
+    loadData();
+    loadConfigFromHash();
     const observer = new ResizeObserver(resizeCanvas);
     observer.observe(el.canvas.parentElement);
   }
