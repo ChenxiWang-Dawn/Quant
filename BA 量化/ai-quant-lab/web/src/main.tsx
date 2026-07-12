@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles.css";
 import "./market-chart.css";
+import "./product-experience.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

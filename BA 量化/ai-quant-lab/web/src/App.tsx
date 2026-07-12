@@ -20,6 +20,7 @@ function App() {
           <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
           <Route path="/strategies/:strategyId/lab" element={<StrategyLab />} />
           <Route path="/experiments" element={<Experiments />} />
+          <Route path="/guide" element={<BeginnerGuide />} />
           <Route path="/methodology" element={<Methodology />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
@@ -43,6 +44,7 @@ function Header() {
         <NavLink to="/strategies">策略库</NavLink>
         <NavLink to="/strategies/ma_cross/lab">行情研究</NavLink>
         <NavLink to="/experiments">实验</NavLink>
+        <NavLink to="/guide">新手指南</NavLink>
         <NavLink to="/methodology">研究方法</NavLink>
       </nav>
       <div className="header-actions">
@@ -62,6 +64,7 @@ function HomePage() {
     }).catch(() => loadSnapshot().then((snapshot) => { setQuotes(snapshot.quotes || []); setSource(snapshot.updatedAt ? `最近快照 · ${snapshot.updatedAt}` : "尚未生成云端快照"); }).catch(() => setSource("数据服务未连接")));
   }, []);
   return <>
+    <WelcomePanel />
     <section className="hero wrap">
       <div className="hero-copy">
         <p className="eyebrow">AI QUANT LAB / RESEARCH FIRST</p>
@@ -79,6 +82,7 @@ function HomePage() {
       </div>
     </section>
     <section className="wrap metrics" aria-label="平台概览"><Metric value={`${strategies.length}`} label="已收录策略" /><Metric value="2" label="已验证核心逻辑" /><Metric value="A 股 / ETF / 美股" label="覆盖市场" /><Metric value="收盘确认" label="信号纪律" /></section>
+    <section className="wrap start-path"><div className="section-heading"><div><p className="eyebrow">START HERE</p><h2>第一次研究，从这三步开始</h2></div><Link className="text-link" to="/guide">查看完整指南 <span>→</span></Link></div><div className="start-steps"><StartStep number="1" title="选一个熟悉的标的" body="从平安银行、贵州茅台或你熟悉的股票开始，不必一开始就寻找“最好”的标的。" link="打开行情研究" to="/strategies/ma_cross/lab" /><StartStep number="2" title="先看图，再看信号" body="加载 K 线后观察 MA、BOLL、MACD 等指标，让策略规则与价格行为对应起来。" link="查看策略库" to="/strategies" /><StartStep number="3" title="运行并保存一次实验" body="每次回测都会固定区间、成本与参数；保存实验，才有真正可比较的研究记录。" link="学习如何解读结果" to="/guide" /></div></section>
     <section className="wrap section"><div className="section-heading"><div><p className="eyebrow">STRATEGY LIBRARY</p><h2>从清晰的规则开始</h2></div><Link className="text-link" to="/strategies">查看全部策略 <span>→</span></Link></div><div className="strategy-grid">{strategies.map((strategy) => <StrategyCard key={strategy.id} strategy={strategy} />)}</div></section>
     <section className="method-section"><div className="wrap"><p className="eyebrow">RESEARCH DISCIPLINE</p><h2>研究不是寻找最优参数，<br />而是寻找能经受检验的规则。</h2><div className="method-grid"><Method number="01" title="提出假设" body="说明为何预期某种市场行为会持续存在。" /><Method number="02" title="固定规则" body="明确入场、退出、仓位、成本和交易时点。" /><Method number="03" title="历史验证" body="同时查看收益、回撤、交易质量与基准。" /><Method number="04" title="稳健性检查" body="通过参数邻域、分段与成本敏感性检验。" /></div></div></section>
   </>;
@@ -86,6 +90,8 @@ function HomePage() {
 
 function Metric({ value, label }: { value: string; label: string }) { return <div className="metric"><strong>{value}</strong><span>{label}</span></div>; }
 function Method({ number, title, body }: { number: string; title: string; body: string }) { return <article className="method"><span>{number}</span><h3>{title}</h3><p>{body}</p></article>; }
+function StartStep({ number, title, body, link, to }: { number: string; title: string; body: string; link: string; to: string }) { return <article className="start-step"><span>{number}</span><h3>{title}</h3><p>{body}</p><Link to={to}>{link} <b>→</b></Link></article>; }
+function WelcomePanel() { const [dismissed, setDismissed] = useState(() => localStorage.getItem("aiQuantLab.welcomeDismissed") === "1"); if (dismissed) return null; const dismiss = () => { localStorage.setItem("aiQuantLab.welcomeDismissed", "1"); setDismissed(true); }; return <section className="wrap welcome-panel" aria-label="新手提示"><div className="welcome-icon">✦</div><div><strong>欢迎来到 AI Quant Lab</strong><p>不需要金融工程背景。先从一张 K 线图和一次可复现的回测开始。</p></div><div className="welcome-actions"><Link className="button button-small" to="/guide">3 分钟入门</Link><button className="text-button" onClick={dismiss}>暂时跳过</button></div></section>; }
 
 function StrategyCard({ strategy }: { strategy: Strategy }) {
   return <article className="strategy-card"><div className="card-top"><span className="tag">{strategy.category}</span><span className="status">已验证</span></div><h3>{strategy.name}</h3><p>{strategy.summary}</p><div className="card-meta"><span>{strategy.holdingPeriod}</span><span>风险 {strategy.riskLevel}</span></div><Link className="card-link" to={`/strategies/${strategy.id}`}>查看策略 <span>→</span></Link></article>;
@@ -145,6 +151,10 @@ function ResultCard({ label, value, trend, inverse }: { label: string; value: st
 function TradeTable({ result }: { result: BacktestResult }) { return <div className="trade-card"><div className="chart-head"><div><p className="eyebrow">TRADE LEDGER</p><h2>交易流水</h2></div><span>{result.trades.length} 笔</span></div><div className="table-wrap"><table><thead><tr><th>日期</th><th>方向</th><th>价格</th><th>数量</th><th>原因</th></tr></thead><tbody>{result.trades.slice(0, 20).map((trade, index) => { const isBuy = trade.side.toLowerCase() === "buy"; return <tr key={`${trade.date}-${index}`}><td>{trade.date}</td><td className={isBuy ? "up" : "down"}>{isBuy ? "买入" : "卖出"}</td><td>{fmtNum(trade.price)}</td><td>{fmtNum(trade.shares)}</td><td>{trade.reason || "—"}</td></tr>; })}</tbody></table></div></div>; }
 
 function Experiments() { const [experiments, setExperiments] = useState<Experiment[]>(() => JSON.parse(localStorage.getItem("aiQuantLab.experiments") || "[]")); const clear = () => { localStorage.removeItem("aiQuantLab.experiments"); setExperiments([]); }; return <section className="wrap page"><p className="eyebrow">EXPERIMENT LIBRARY</p><h1>实验库</h1><p className="page-intro">保存配置、数据区间、引擎与成本假设，才有可能复现一次研究。</p>{experiments.length ? <><div className="section-heading minor"><h2>本地已保存实验</h2><button className="text-button" onClick={clear}>清空本地记录</button></div><div className="experiment-list">{experiments.map((item) => <article key={item.id}><div><span className="tag">{item.strategyName}</span><h3>{item.name}</h3><p>{item.period} · {item.engine} · {item.createdAt}</p></div><div className="experiment-metrics"><span>收益 <b className="up">{fmtPct(item.summary.totalReturn)}</b></span><span>回撤 <b>{fmtPct(item.summary.maxDrawdown)}</b></span></div></article>)}</div></> : <div className="empty-results"><strong>尚无保存的实验</strong><p>进入任意策略工作台并运行回测后，即可保存一份配置快照。</p><Link className="button button-small" to="/strategies">选择策略</Link></div>}</section>; }
+
+function BeginnerGuide() { return <section className="wrap page guide-page"><p className="eyebrow">BEGINNER GUIDE</p><h1>从“看图”到“做研究”</h1><p className="page-intro">量化研究不是预测明天涨跌，而是把想法写成规则，再确认它在不同阶段是否依然可靠。</p><div className="guide-hero-card"><div><span className="tag">推荐起点</span><h2>用 MA 双均线做第一次完整研究</h2><p>它的规则清晰、参数很少，适合理解信号、交易成本、回撤和实验保存分别意味着什么。</p></div><Link className="button" to="/strategies/ma_cross/lab">开始示例研究</Link></div><div className="guide-grid"><GuideCard index="01" title="认识一张图" body="输入标的并加载行情。先看价格趋势，再开启 MA、BOLL、MACD 或 RSI；每个指标都是观察市场的角度，不是预测工具。" action="进入行情研究" to="/strategies/ma_cross/lab" /><GuideCard index="02" title="设置一条规则" body="从默认参数开始。先不要追逐最优参数，理解快线、慢线和目标仓位各自改变了什么。" action="查看双均线策略" to="/strategies/ma_cross" /><GuideCard index="03" title="读懂一份结果" body="收益必须与最大回撤、交易次数、成本和样本区间一起看。没有风险上下文的收益数字没有结论价值。" action="学习结果解读" to="/methodology" /></div><section className="glossary"><div><p className="eyebrow">GLOSSARY</p><h2>第一次会遇到的词</h2></div><div className="glossary-grid"><Glossary term="K 线" text="把一个周期内的开盘、最高、最低和收盘价格放在同一根柱中。" /><Glossary term="回测" text="用历史数据模拟一套明确规则的执行过程，不是对未来收益的承诺。" /><Glossary term="最大回撤" text="净值从历史高点到之后低点的最大跌幅，用于观察策略的压力时刻。" /><Glossary term="滑点与手续费" text="模拟成交时的摩擦成本；忽略它们，回测通常会显得过于乐观。" /></div></section></section>; }
+function GuideCard({ index, title, body, action, to }: { index: string; title: string; body: string; action: string; to: string }) { return <article className="guide-card"><span>{index}</span><h2>{title}</h2><p>{body}</p><Link to={to}>{action} <b>→</b></Link></article>; }
+function Glossary({ term, text }: { term: string; text: string }) { return <article><strong>{term}</strong><p>{text}</p></article>; }
 
 function Methodology() { return <section className="wrap page prose"><p className="eyebrow">METHODOLOGY</p><h1>研究方法</h1><p className="page-intro">平台把可解释性、可复现性和风险暴露放在收益展示之前。</p><h2>交易时点</h2><p>策略在当日收盘后的可得信息上生成信号，默认以次一交易日开盘价成交。此约定避免将收盘后的信息提前用于交易决策。</p><h2>成本与执行</h2><p>每次验证固定初始资金、手续费、滑点、最低佣金、整手规则与是否允许做空。结果页面会同时显示这些假设与使用的回测引擎。</p><h2>稳健性</h2><p>不把单点最优参数当作结论。应检查相邻参数、不同市场阶段、样本外区间以及更高交易成本下的表现。</p><h2>数据来源</h2><p>GitHub 部署环境只使用 AkShare、yfinance 等开源或免费数据源；RQData 只在本地、已授权的研究服务中开放。公开页面的离线快照会标明更新时间，不能替代实时查询。</p></section>; }
 
