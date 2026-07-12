@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ma_cross",
+    "version": "1.0.0",
+    "name": "MA 双均线交叉",
+    "category": "趋势跟随",
+    "status": "validated",
+    "markets": ["A 股", "ETF"],
+    "frequencies": ["日频", "周频"],
+    "summary": "以短期与长期均线交叉识别趋势切换，收盘确认、下一交易日开盘成交。",
+    "hypothesis": "趋势一旦形成，价格惯性可能在一段时间内延续。",
+    "riskLevel": "中",
+    "holdingPeriod": "数日至数月",
+    "implementation": "quant_lab.strategies:MACrossStrategy",
+    "params": [
+      {"key": "fast_window", "label": "快线窗口", "type": "integer", "default": 5, "minimum": 2, "maximum": 120, "step": 1},
+      {"key": "slow_window", "label": "慢线窗口", "type": "integer", "default": 20, "minimum": 3, "maximum": 260, "step": 1},
+      {"key": "target_weight", "label": "目标仓位", "type": "number", "default": 0.95, "minimum": 0.1, "maximum": 1, "step": 0.05}
+    ],
+    "constraints": ["fast_window < slow_window"],
+    "capabilities": {"backtest": true, "optimize": true, "rqalpha": true, "browserFallback": false},
+    "risks": ["震荡市可能产生频繁假信号", "均线策略存在天然滞后", "参数过拟合会降低样本外稳健性"],
+    "updatedAt": "2026-07-11"
+  },
+  {
+    "id": "turtle_breakout",
+    "version": "1.0.0",
+    "name": "海龟突破",
+    "category": "趋势突破",
+    "status": "validated",
+    "markets": ["A 股", "ETF"],
+    "frequencies": ["日频", "周频"],
+    "summary": "突破历史通道入场，跌破退出通道或触发 ATR 保护止损时离场。",
+    "hypothesis": "少数强趋势有机会覆盖多次小额试错损失。",
+    "riskLevel": "高",
+    "holdingPeriod": "数周至数月",
+    "implementation": "quant_lab.strategies:TurtleBreakoutStrategy",
+    "params": [
+      {"key": "entry_window", "label": "入场突破窗口", "type": "integer", "default": 20, "minimum": 5, "maximum": 120, "step": 1},
+      {"key": "exit_window", "label": "退出跌破窗口", "type": "integer", "default": 10, "minimum": 2, "maximum": 80, "step": 1},
+      {"key": "atr_window", "label": "ATR 窗口", "type": "integer", "default": 20, "minimum": 3, "maximum": 80, "step": 1},
+      {"key": "stop_atr_multiplier", "label": "止损 ATR 倍数", "type": "number", "default": 2, "minimum": 0.5, "maximum": 6, "step": 0.25},
+      {"key": "target_weight", "label": "目标仓位", "type": "number", "default": 0.95, "minimum": 0.1, "maximum": 1, "step": 0.05}
+    ],
+    "constraints": ["exit_window < entry_window"],
+    "capabilities": {"backtest": true, "optimize": true, "rqalpha": true, "browserFallback": false},
+    "risks": ["连续假突破会造成小额损失", "ATR 止损并不保证跳空时的成交价格", "趋势缺失时资金效率可能较低"],
+    "updatedAt": "2026-07-11"
+  }
+]

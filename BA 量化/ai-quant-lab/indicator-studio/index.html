@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Quant Lab - Indicator Studio</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">AQ</span>
+          <div>
+            <h1>AI Quant Lab</h1>
+            <p>Indicator Studio</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <label class="file-button" title="导入 date,open,high,low,close,volume 格式的 CSV">
+            <input id="csvInput" type="file" accept=".csv,text/csv" />
+            导入 CSV
+          </label>
+          <label class="file-button" title="导入之前导出的研究配置 JSON">
+            <input id="configInput" type="file" accept=".json,application/json" />
+            导入配置
+          </label>
+          <select id="presetSelect" class="compact-select" title="加载已保存配置">
+            <option value="">配置模板</option>
+          </select>
+          <button id="savePresetBtn" class="ghost-button">保存配置</button>
+          <button id="deletePresetBtn" class="ghost-button">删除配置</button>
+          <button id="shareConfigBtn" class="ghost-button">分享链接</button>
+          <button id="downloadCsvBtn" class="ghost-button">下载 CSV</button>
+        </div>
+      </header>
+
+      <section class="data-toolbar" aria-label="数据选择">
+        <label>
+          数据源
+          <select id="dataSourceSelect">
+            <option value="auto">自动选择</option>
+            <option value="sample">示例行情</option>
+            <option value="akshare">AkShare</option>
+            <option value="yfinance">Yahoo Finance</option>
+            <option value="rqdata">RQData</option>
+            <option value="tushare">Tushare</option>
+          </select>
+        </label>
+        <label>
+          本地服务
+          <input id="backendUrlInput" type="text" value="http://127.0.0.1:8766" />
+        </label>
+        <label>
+          股票
+          <input id="symbolInput" type="text" value="000001.XSHE" list="symbolOptions" />
+          <datalist id="symbolOptions">
+            <option value="000001.XSHE">平安银行</option>
+            <option value="600519.XSHG">贵州茅台</option>
+            <option value="300750.XSHE">宁德时代</option>
+            <option value="002050.XSHE">三花智控</option>
+            <option value="AAPL">Apple</option>
+            <option value="MSFT">Microsoft</option>
+            <option value="NVDA">NVIDIA</option>
+          </datalist>
+        </label>
+        <label>
+          开始
+          <input id="startDate" type="date" />
+        </label>
+        <label>
+          结束
+          <input id="endDate" type="date" />
+        </label>
+        <label>
+          周期
+          <select id="frequencySelect">
+            <option value="1d">日线</option>
+            <option value="1w">周线</option>
+          </select>
+        </label>
+        <label>
+          复权
+          <select id="adjustSelect">
+            <option value="pre">前复权</option>
+            <option value="none">不复权</option>
+          </select>
+        </label>
+        <button id="loadDataBtn" class="primary-button">加载数据</button>
+        <button id="checkBackendBtn" class="ghost-button">连接服务</button>
+        <button id="resetViewBtn" class="ghost-button">重置视图</button>
+        <div class="template-group" aria-label="指标模板">
+          <button class="template-button" data-template="trend">趋势</button>
+          <button class="template-button" data-template="momentum">动量</button>
+          <button class="template-button" data-template="risk">波动</button>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <aside class="indicator-sidebar">
+          <div class="sidebar-head">
+            <div>
+              <h2>指标面板</h2>
+              <p>调节参数后实时重绘</p>
+            </div>
+            <label class="switch" title="关闭后需要手动点击应用参数">
+              <input id="autoRedraw" type="checkbox" checked />
+              <span></span>
+            </label>
+            <button id="collapseIndicatorsBtn" class="icon-button sidebar-toggle" title="收起指标面板">‹</button>
+          </div>
+
+          <div class="add-row">
+            <select id="indicatorTypeSelect">
+              <option value="MA">MA 均线</option>
+              <option value="EMA">EMA 指数均线</option>
+              <option value="BOLL">BOLL 布林带</option>
+              <option value="MACD">MACD</option>
+              <option value="RSI">RSI</option>
+              <option value="KDJ">KDJ</option>
+              <option value="ATR">ATR</option>
+              <option value="VOLMA">成交量均线</option>
+            </select>
+            <button id="addIndicatorBtn" class="primary-button">添加</button>
+          </div>
+
+          <div id="indicatorList" class="indicator-list"></div>
+        </aside>
+
+        <section class="chart-panel">
+          <div class="chart-header">
+            <div>
+              <h2 id="chartTitle">000001.XSHE 平安银行</h2>
+              <p id="chartSubtitle">示例行情 · 日线 · 前复权</p>
+            </div>
+            <div class="chart-actions">
+              <button id="openStrategyBtn" class="primary-button">策略验证</button>
+              <button id="applyParamsBtn" class="primary-button hidden">应用参数</button>
+              <button id="exportConfigBtn" class="ghost-button">导出配置</button>
+            </div>
+          </div>
+          <div id="metricStrip" class="metric-strip"></div>
+          <nav class="mode-tabs" aria-label="研究视图">
+            <button class="mode-tab active" data-mode="chart">图表</button>
+            <button class="mode-tab mode-tab-primary" data-mode="backtest">策略</button>
+            <button class="mode-tab" data-mode="signals">信号</button>
+            <button class="mode-tab" data-mode="optimize">优化</button>
+            <button class="mode-tab" data-mode="compare">对比</button>
+            <button class="mode-tab" data-mode="templates">模板</button>
+            <button class="mode-tab" data-mode="ai">AI</button>
+            <button class="mode-tab" data-mode="projects">项目</button>
+            <button class="mode-tab" data-mode="research">研究</button>
+          </nav>
+          <section id="signalsPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                信号风格
+                <select id="signalProfile">
+                  <option value="balanced">均衡确认</option>
+                  <option value="trend">趋势优先</option>
+                  <option value="momentum">动量反转</option>
+                </select>
+              </label>
+              <label>
+                RSI 低位
+                <input id="rsiLow" type="number" min="1" max="50" value="30" />
+              </label>
+              <label>
+                RSI 高位
+                <input id="rsiHigh" type="number" min="50" max="99" value="70" />
+              </label>
+              <label>
+                手续费 bp
+                <input id="feeBps" type="number" min="0" step="1" value="8" />
+              </label>
+            </div>
+            <div id="signalSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>方向</th>
+                    <th>价格</th>
+                    <th>强度</th>
+                    <th>原因</th>
+                  </tr>
+                </thead>
+                <tbody id="tradeLedger"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="comparePanel" class="mode-panel hidden">
+            <div id="compareSymbols" class="compare-symbols"></div>
+            <div id="compareSummary" class="summary-grid"></div>
+          </section>
+          <section id="optimizePanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                Fast 起点
+                <input id="optFastStart" type="number" min="2" max="60" value="3" />
+              </label>
+              <label>
+                Fast 终点
+                <input id="optFastEnd" type="number" min="3" max="80" value="18" />
+              </label>
+              <label>
+                Slow 起点
+                <input id="optSlowStart" type="number" min="5" max="120" value="20" />
+              </label>
+              <label>
+                Slow 终点
+                <input id="optSlowEnd" type="number" min="8" max="180" value="80" />
+              </label>
+              <label>
+                步长
+                <input id="optStep" type="number" min="1" max="20" value="5" />
+              </label>
+              <button id="runOptimizeBtn" class="primary-button">运行优化</button>
+            </div>
+            <div id="optimizeSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table class="optimize-table">
+                <colgroup>
+                  <col class="col-rank" />
+                  <col class="col-small" />
+                  <col class="col-small" />
+                  <col class="col-number" />
+                  <col class="col-number" />
+                  <col class="col-small" />
+                  <col class="col-number" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th class="numeric">排名</th>
+                    <th class="numeric">Fast</th>
+                    <th class="numeric">Slow</th>
+                    <th class="numeric">收益</th>
+                    <th class="numeric">回撤</th>
+                    <th class="numeric">交易</th>
+                    <th class="numeric">评分</th>
+                  </tr>
+                </thead>
+                <tbody id="optimizeTable"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="backtestPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                引擎
+                <select id="backtestEngine">
+                  <option value="python">本地 Python 专业回测</option>
+                  <option value="rqalpha">RQAlpha Plus 完整引擎</option>
+                  <option value="local">浏览器轻量回测</option>
+                </select>
+              </label>
+              <label>
+                初始资金
+                <input id="initialCash" type="number" min="10000" step="10000" value="100000" />
+              </label>
+              <label>
+                策略
+                <select id="strategySelect">
+                  <option value="ma_cross">MA 双均线</option>
+                  <option value="turtle_breakout">海龟交易法</option>
+                </select>
+              </label>
+              <label>
+                <span id="strategyFastLabel">快线</span>
+                <input id="strategyFastWindow" type="number" min="2" max="120" value="5" />
+              </label>
+              <label>
+                <span id="strategySlowLabel">慢线</span>
+                <input id="strategySlowWindow" type="number" min="3" max="260" value="20" />
+              </label>
+              <label class="turtle-param hidden">
+                ATR 窗口
+                <input id="strategyAtrWindow" type="number" min="3" max="80" value="20" />
+              </label>
+              <label class="turtle-param hidden">
+                止损 ATR 倍数
+                <input id="strategyStopAtr" type="number" min="0.5" max="6" step="0.25" value="2" />
+              </label>
+              <label>
+                目标仓位
+                <input id="targetWeight" type="number" min="0.1" max="1" step="0.05" value="0.95" />
+              </label>
+              <label>
+                滑点 bp
+                <input id="slippageBps" type="number" min="0" step="1" value="2" />
+              </label>
+              <label>
+                最低佣金
+                <input id="minCommission" type="number" min="0" step="1" value="5" />
+              </label>
+              <button id="runBacktestBtn" class="primary-button">运行回测</button>
+              <button id="runStrategyOptimizeBtn" class="ghost-button">参数扫描</button>
+              <button id="generateStrategyBtn" class="ghost-button">生成策略草稿</button>
+            </div>
+            <div id="backtestSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table class="metric-table">
+                <colgroup>
+                  <col class="col-metric-name" />
+                  <col class="col-metric-value" />
+                  <col class="col-metric-note" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>指标</th>
+                    <th class="numeric">数值</th>
+                    <th>说明</th>
+                  </tr>
+                </thead>
+                <tbody id="backtestMetricTable"></tbody>
+              </table>
+            </div>
+            <div class="table-shell">
+              <table class="trade-table">
+                <colgroup>
+                  <col class="col-date" />
+                  <col class="col-side" />
+                  <col class="col-price" />
+                  <col class="col-shares" />
+                  <col class="col-turnover" />
+                  <col class="col-fee" />
+                  <col class="col-slip" />
+                  <col class="col-reason" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>方向</th>
+                    <th class="numeric">价格</th>
+                    <th class="numeric">股数</th>
+                    <th class="numeric">成交额</th>
+                    <th class="numeric">手续费</th>
+                    <th class="numeric">滑点</th>
+                    <th>原因</th>
+                  </tr>
+                </thead>
+                <tbody id="backtestTradeTable"></tbody>
+              </table>
+            </div>
+            <pre id="strategyDraft" class="code-panel hidden"></pre>
+          </section>
+          <section id="templatesPanel" class="mode-panel hidden">
+            <div id="templateMarket" class="template-market"></div>
+          </section>
+          <section id="aiPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <button id="explainBtn" class="primary-button">生成指标解释</button>
+              <button id="draftFromAiBtn" class="ghost-button">生成策略草稿</button>
+            </div>
+            <div id="aiBrief" class="ai-brief"></div>
+          </section>
+          <section id="projectsPanel" class="mode-panel hidden">
+            <div class="panel-controls">
+              <label>
+                项目名
+                <input id="projectNameInput" type="text" value="默认研究项目" />
+              </label>
+              <button id="saveProjectBtn" class="primary-button">保存实验</button>
+              <button id="loadProjectBtn" class="ghost-button">加载项目</button>
+              <button id="deleteProjectBtn" class="ghost-button">删除项目</button>
+            </div>
+            <div id="projectSummary" class="summary-grid"></div>
+            <div class="table-shell">
+              <table class="project-table">
+                <colgroup>
+                  <col class="col-time" />
+                  <col class="col-project" />
+                  <col class="col-symbol" />
+                  <col class="col-source" />
+                  <col class="col-number" />
+                  <col class="col-number" />
+                  <col class="col-template" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>项目</th>
+                    <th>标的</th>
+                    <th>数据源</th>
+                    <th class="numeric">收益</th>
+                    <th class="numeric">回撤</th>
+                    <th>模板</th>
+                  </tr>
+                </thead>
+                <tbody id="experimentTable"></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="researchPanel" class="mode-panel hidden">
+            <div id="researchBrief" class="research-brief"></div>
+          </section>
+          <div class="canvas-wrap">
+            <canvas id="priceCanvas"></canvas>
+            <div id="tooltip" class="tooltip hidden"></div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <span id="statusText">准备就绪</span>
+        <span id="cursorText">移动鼠标查看 K 线详情</span>
+      </footer>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

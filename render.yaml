@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ai-quant-lab-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: BA 量化/ai-quant-lab/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: AI_QUANT_LAB_RUNTIME
+        value: cloud
+      - key: APP_ALLOWED_ORIGINS
+        sync: false
