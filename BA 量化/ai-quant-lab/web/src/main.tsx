@@ -5,6 +5,7 @@ import App from "./App";
 import "./styles.css";
 import "./market-chart.css";
 import "./product-experience.css";
+import "./indicator-library.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

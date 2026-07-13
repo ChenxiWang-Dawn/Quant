@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api, getApiBase, loadSnapshot, setApiBase } from "./lib/api";
 import { strategies, strategyById } from "./data/strategies";
+import { indicatorGuides, type IndicatorCategory, type IndicatorGuide } from "./indicator-library";
 import type { BacktestResult, Candle, Experiment, Quote, Strategy } from "./types";
 
 const fmtPct = (value?: number) => (value === undefined || Number.isNaN(value) ? "—" : `${(value * 100).toFixed(2)}%`);
@@ -21,6 +22,7 @@ function App() {
           <Route path="/strategies/:strategyId/lab" element={<StrategyLab />} />
           <Route path="/experiments" element={<Experiments />} />
           <Route path="/guide" element={<BeginnerGuide />} />
+          <Route path="/indicators" element={<IndicatorLibrary />} />
           <Route path="/methodology" element={<Methodology />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
@@ -45,6 +47,7 @@ function Header() {
         <NavLink to="/strategies/ma_cross/lab">行情研究</NavLink>
         <NavLink to="/experiments">实验</NavLink>
         <NavLink to="/guide">新手指南</NavLink>
+        <NavLink to="/indicators">指标百科</NavLink>
         <NavLink to="/methodology">研究方法</NavLink>
       </nav>
       <div className="header-actions">
@@ -155,6 +158,20 @@ function Experiments() { const [experiments, setExperiments] = useState<Experime
 function BeginnerGuide() { return <section className="wrap page guide-page"><p className="eyebrow">BEGINNER GUIDE</p><h1>从“看图”到“做研究”</h1><p className="page-intro">量化研究不是预测明天涨跌，而是把想法写成规则，再确认它在不同阶段是否依然可靠。</p><div className="guide-hero-card"><div><span className="tag">推荐起点</span><h2>用 MA 双均线做第一次完整研究</h2><p>它的规则清晰、参数很少，适合理解信号、交易成本、回撤和实验保存分别意味着什么。</p></div><Link className="button" to="/strategies/ma_cross/lab">开始示例研究</Link></div><div className="guide-grid"><GuideCard index="01" title="认识一张图" body="输入标的并加载行情。先看价格趋势，再开启 MA、BOLL、MACD 或 RSI；每个指标都是观察市场的角度，不是预测工具。" action="进入行情研究" to="/strategies/ma_cross/lab" /><GuideCard index="02" title="设置一条规则" body="从默认参数开始。先不要追逐最优参数，理解快线、慢线和目标仓位各自改变了什么。" action="查看双均线策略" to="/strategies/ma_cross" /><GuideCard index="03" title="读懂一份结果" body="收益必须与最大回撤、交易次数、成本和样本区间一起看。没有风险上下文的收益数字没有结论价值。" action="学习结果解读" to="/methodology" /></div><section className="glossary"><div><p className="eyebrow">GLOSSARY</p><h2>第一次会遇到的词</h2></div><div className="glossary-grid"><Glossary term="K 线" text="把一个周期内的开盘、最高、最低和收盘价格放在同一根柱中。" /><Glossary term="回测" text="用历史数据模拟一套明确规则的执行过程，不是对未来收益的承诺。" /><Glossary term="最大回撤" text="净值从历史高点到之后低点的最大跌幅，用于观察策略的压力时刻。" /><Glossary term="滑点与手续费" text="模拟成交时的摩擦成本；忽略它们，回测通常会显得过于乐观。" /></div></section></section>; }
 function GuideCard({ index, title, body, action, to }: { index: string; title: string; body: string; action: string; to: string }) { return <article className="guide-card"><span>{index}</span><h2>{title}</h2><p>{body}</p><Link to={to}>{action} <b>→</b></Link></article>; }
 function Glossary({ term, text }: { term: string; text: string }) { return <article><strong>{term}</strong><p>{text}</p></article>; }
+
+function IndicatorLibrary() {
+  const categories: Array<"全部" | IndicatorCategory> = ["全部", "趋势", "动量", "波动与风险", "成交量"];
+  const [category, setCategory] = useState<"全部" | IndicatorCategory>("全部");
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(indicatorGuides[0].id);
+  const [tab, setTab] = useState<"principle" | "calculation" | "meaning" | "playbook" | "decisionGuide">("principle");
+  const visible = useMemo(() => indicatorGuides.filter((item) => (category === "全部" || item.category === category) && `${item.name}${item.english}${item.summary}`.toLowerCase().includes(query.toLowerCase())), [category, query]);
+  const selected = indicatorGuides.find((item) => item.id === selectedId) || indicatorGuides[0];
+  const openIndicator = (item: IndicatorGuide) => { setSelectedId(item.id); setTab("principle"); window.setTimeout(() => document.getElementById("indicator-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0); };
+  const tabs: Array<[typeof tab, string]> = [["principle", "原理"], ["calculation", "计算过程"], ["meaning", "含义"], ["playbook", "指标战法"], ["decisionGuide", "投资提示"]];
+  const tabContent = tab === "principle" ? [selected.principle] : selected[tab];
+  return <section className="wrap page indicator-page"><p className="eyebrow">INDICATOR LIBRARY</p><h1>指标百科</h1><p className="page-intro">把技术指标当作观察市场的语言。先理解它在计算什么、适合什么环境，再决定是否把它写入一条可验证的规则。</p><div className="indicator-intro"><div><strong>{indicatorGuides.length} 个已支持指标</strong><span>趋势、动量、波动风险与成交量</span></div><Link className="button button-small" to="/strategies/ma_cross/lab">在行情图中使用指标</Link></div><div className="indicator-tools"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索 MA、MACD、波动或成交量" aria-label="搜索指标" /><div className="filter-row">{categories.map((item) => <button key={item} className={category === item ? "filter active" : "filter"} onClick={() => setCategory(item)}>{item}</button>)}</div></div><div className="indicator-card-grid">{visible.map((item) => <article className={selected.id === item.id ? "indicator-card selected" : "indicator-card"} key={item.id}><div><span className="tag">{item.category}</span><span className="indicator-code">{item.english}</span></div><h2>{item.name}</h2><p>{item.summary}</p><button className="button button-small button-quiet" onClick={() => openIndicator(item)}>查看指标详情</button></article>)}</div><section id="indicator-detail" className="indicator-detail"><div className="indicator-detail-head"><div><p className="eyebrow">{selected.category.toUpperCase()}</p><h2>{selected.name} <span>{selected.english}</span></h2><p>{selected.summary}</p></div><Link className="text-link" to="/strategies/ma_cross/lab">去行情研究中使用 <span>→</span></Link></div><div className="indicator-tabs" role="tablist" aria-label="指标内容切换">{tabs.map(([key, label]) => <button key={key} role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}</div><div className="indicator-content"><ol>{tabContent.map((item) => <li key={item}>{item}</li>)}</ol>{tab === "decisionGuide" && <aside><strong>使用边界</strong><ul>{selected.cautions.map((item) => <li key={item}>{item}</li>)}</ul></aside>}</div></section><div className="indicator-disclaimer"><strong>重要提醒</strong><p>指标用于研究与复盘，不构成个性化投资建议。任何战法都应在明确标的、样本区间、交易成本和风险约束后进行回测验证。</p></div></section>;
+}
 
 function Methodology() { return <section className="wrap page prose"><p className="eyebrow">METHODOLOGY</p><h1>研究方法</h1><p className="page-intro">平台把可解释性、可复现性和风险暴露放在收益展示之前。</p><h2>交易时点</h2><p>策略在当日收盘后的可得信息上生成信号，默认以次一交易日开盘价成交。此约定避免将收盘后的信息提前用于交易决策。</p><h2>成本与执行</h2><p>每次验证固定初始资金、手续费、滑点、最低佣金、整手规则与是否允许做空。结果页面会同时显示这些假设与使用的回测引擎。</p><h2>稳健性</h2><p>不把单点最优参数当作结论。应检查相邻参数、不同市场阶段、样本外区间以及更高交易成本下的表现。</p><h2>数据来源</h2><p>GitHub 部署环境只使用 AkShare、yfinance 等开源或免费数据源；RQData 只在本地、已授权的研究服务中开放。公开页面的离线快照会标明更新时间，不能替代实时查询。</p></section>; }
 
