@@ -1,16 +1,6 @@
 {
-  "updatedAt": "2026-07-14T06:23:55.627395+00:00",
+  "updatedAt": "2026-07-14T10:09:23.865546+00:00",
   "quotes": [
-    {
-      "symbol": "600519.XSHG",
-      "name": "600519",
-      "price": 1216.19,
-      "change": 5.2000000000000455,
-      "changePercent": 0.0042940073823896086,
-      "asOf": "2026-07-14",
-      "source": "akshare daily snapshot",
-      "delayed": true
-    },
     {
       "symbol": "AAPL",
       "name": "AAPL",
