@@ -1,0 +1,40 @@
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.gpu
+    ports:
+      - "8787:8787"
+    volumes:
+      - ai_research_data:/data
+    environment:
+      AI_QUANT_LAB_RUNTIME: local
+      AI_QUANT_LAB_GPU_ENABLED: "true"
+      AI_QUANT_LAB_LLM_BASE_URL: http://ollama:11434/v1
+      AI_QUANT_LAB_LLM_MODEL: qwen2.5:14b-instruct
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      ollama:
+        condition: service_started
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+volumes:
+  ai_research_data:
+  ollama_data:

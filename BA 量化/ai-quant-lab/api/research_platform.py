@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import sqlite3
 import time
 import uuid
@@ -295,6 +296,12 @@ class AIPlatform:
         validation = self.rl_validate(payload)
         if validation["status"] != "passed":
             raise ValueError("环境未通过安全测试")
+        if str(payload.get("algorithm", "baseline")).lower() == "ppo":
+            if not self.local_runtime:
+                raise ValueError("PPO 只允许在本地 GPU/CPU Worker 运行")
+            from rl_ppo import train_ppo
+            record = train_ppo(payload) | {"id": stable_id("rl", {"algorithm": "ppo", "payload": payload}), "environmentValidation": validation, "boundary": "研究/影子仿真；不能实盘运行或导出下单指令。"}
+            return self.store.save("rl_run", record, "ppo_simulation_completed")
         prices = np.asarray(payload.get("prices", [100, 101, 99, 102, 104, 103, 106, 105]), dtype=float)
         seeds = [int(seed) for seed in payload.get("seeds", [7, 17, 29])][:5]
         cost = float(payload.get("transactionCost", 0.001))
@@ -324,6 +331,9 @@ class AIPlatform:
             raise ValueError("本地未安装 PyTorch。请在受控本地研究环境安装后再运行深度学习训练。")
         prices = np.asarray(payload.get("prices", [100, 101, 99, 102, 104, 103, 106, 105, 107, 108, 106, 110, 111, 109, 113, 114, 116, 115, 118, 121, 120, 122, 124, 123, 126, 128, 129, 127, 131, 133, 132, 136, 137, 139, 138, 141, 143, 145, 144, 147, 150, 149, 152, 154, 153, 156, 158, 160, 159, 163, 165, 164, 168, 170, 172, 171, 175, 178, 177, 181]), dtype=np.float32)
         lookback, epochs = int(payload.get("lookback", 10)), min(int(payload.get("epochs", 80)), 250)
+        architecture = str(payload.get("architecture", "mlp")).lower()
+        if architecture not in {"mlp", "tcn", "gru", "lstm", "transformer"}:
+            raise ValueError("深度学习架构仅支持 MLP、TCN、GRU、LSTM 或 Transformer")
         seeds = [int(seed) for seed in payload.get("seeds", [7, 17, 29])][:5]
         if len(prices) < lookback + 25 or lookback < 3:
             raise ValueError("价格序列不足以建立训练、验证、测试样本；请扩大历史范围。")
@@ -335,14 +345,34 @@ class AIPlatform:
             raise ValueError("可用深度学习样本不足。")
         train_x, validation_x, test_x = samples[:train_end], samples[train_end:validation_end], samples[validation_end:]
         train_y, validation_y, test_y = targets[:train_end], targets[train_end:validation_end], targets[validation_end:]
+        device = torch.device("cuda" if os.getenv("AI_QUANT_LAB_GPU_ENABLED", "").lower() == "true" and torch.cuda.is_available() else "cpu")
+        def make_model():
+            if architecture == "mlp":
+                return torch.nn.Sequential(torch.nn.Flatten(), torch.nn.Linear(lookback, 32), torch.nn.ReLU(), torch.nn.Dropout(.1), torch.nn.Linear(32, 1))
+            if architecture == "tcn":
+                class TCN(torch.nn.Module):
+                    def __init__(self):
+                        super().__init__(); self.net = torch.nn.Sequential(torch.nn.Conv1d(1, 24, 3, padding=2, dilation=1), torch.nn.ReLU(), torch.nn.Conv1d(24, 24, 3, padding=4, dilation=2), torch.nn.ReLU()); self.head = torch.nn.Linear(24, 1)
+                    def forward(self, value): return self.head(self.net(value.transpose(1, 2))[:, :, -1])
+                return TCN()
+            if architecture in {"gru", "lstm"}:
+                recurrent = torch.nn.GRU if architecture == "gru" else torch.nn.LSTM
+                class RNN(torch.nn.Module):
+                    def __init__(self): super().__init__(); self.rnn = recurrent(1, 32, batch_first=True); self.head = torch.nn.Linear(32, 1)
+                    def forward(self, value): return self.head(self.rnn(value)[0][:, -1])
+                return RNN()
+            class Transformer(torch.nn.Module):
+                def __init__(self): super().__init__(); self.embed = torch.nn.Linear(1, 32); self.encoder = torch.nn.TransformerEncoder(torch.nn.TransformerEncoderLayer(d_model=32, nhead=4, dim_feedforward=64, batch_first=True), num_layers=2); self.head = torch.nn.Linear(32, 1)
+                def forward(self, value): return self.head(self.encoder(self.embed(value))[:, -1])
+            return Transformer()
         results = []
         for seed in seeds:
             torch.manual_seed(seed); np.random.seed(seed)
-            model = torch.nn.Sequential(torch.nn.Linear(lookback, 24), torch.nn.ReLU(), torch.nn.Dropout(.1), torch.nn.Linear(24, 1))
-            optimizer = torch.optim.Adam(model.parameters(), lr=float(payload.get("learningRate", .003)))
+            model = make_model().to(device)
+            optimizer = torch.optim.AdamW(model.parameters(), lr=float(payload.get("learningRate", .003)))
             loss_fn = torch.nn.MSELoss(); best_state, best_validation, patience = None, float("inf"), 0
-            x_train, y_train = torch.tensor(train_x), torch.tensor(train_y).reshape(-1, 1)
-            x_validation, y_validation = torch.tensor(validation_x), torch.tensor(validation_y).reshape(-1, 1)
+            x_train, y_train = torch.tensor(train_x, device=device).reshape(-1, lookback, 1), torch.tensor(train_y, device=device).reshape(-1, 1)
+            x_validation, y_validation = torch.tensor(validation_x, device=device).reshape(-1, lookback, 1), torch.tensor(validation_y, device=device).reshape(-1, 1)
             for epoch in range(epochs):
                 model.train(); optimizer.zero_grad(); loss = loss_fn(model(x_train), y_train); loss.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); optimizer.step()
                 model.eval()
@@ -356,10 +386,10 @@ class AIPlatform:
             if best_state is not None:
                 model.load_state_dict(best_state)
             model.eval()
-            with torch.no_grad(): prediction = model(torch.tensor(test_x)).reshape(-1).numpy()
+            with torch.no_grad(): prediction = model(torch.tensor(test_x, device=device).reshape(-1, lookback, 1)).reshape(-1).detach().cpu().numpy()
             mae = float(np.mean(np.abs(prediction - test_y))); directional = float(np.mean((prediction >= 0) == (test_y >= 0)))
             results.append({"seed": seed, "validationLoss": best_validation, "testMae": mae, "directionalAccuracy": directional, "epochs": epoch + 1})
-        record = {"id": stable_id("dl", {"lookback": lookback, "seeds": seeds, "prices": prices.tolist()}), "architecture": "MLP sequence baseline", "tensorContract": {"sample": "[batch, lookback, feature]", "featureCount": 1, "lookback": lookback, "target": "next_period_return", "normalization": "returns only; no test fitting"}, "status": "completed_local", "seeds": results, "aggregate": {"meanMae": float(np.mean([item["testMae"] for item in results])), "meanDirectionalAccuracy": float(np.mean([item["directionalAccuracy"] for item in results])), "seedCount": len(results)}, "training": {"epochsBudget": epochs, "earlyStopping": 12, "gradientClipping": 1.0, "device": "cpu", "checkpoint": "best validation state retained in-memory for this run"}, "gate": {"status": "needs_baseline_comparison", "detail": "深度模型必须与相同数据、切分和成本下的简单模型对比后才能注册。"}}
+        record = {"id": stable_id("dl", {"architecture": architecture, "lookback": lookback, "seeds": seeds, "prices": prices.tolist()}), "architecture": architecture.upper() + " sequence model", "tensorContract": {"sample": "[batch, lookback, feature]", "featureCount": 1, "lookback": lookback, "target": "next_period_return", "normalization": "returns only; no test fitting"}, "status": "completed_local", "seeds": results, "aggregate": {"meanMae": float(np.mean([item["testMae"] for item in results])), "meanDirectionalAccuracy": float(np.mean([item["directionalAccuracy"] for item in results])), "seedCount": len(results)}, "training": {"epochsBudget": epochs, "earlyStopping": 12, "gradientClipping": 1.0, "device": str(device), "checkpoint": "best validation state retained in-memory for this run"}, "gate": {"status": "needs_baseline_comparison", "detail": "深度模型必须与相同数据、切分和成本下的简单模型对比后才能注册。"}}
         return self.store.save("deep_learning_run", record, "deep_learning_run_completed")
 
     def copilot(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -382,8 +412,33 @@ class AIPlatform:
             answer = "策略复盘不会给出买卖指令。应把预测、组合约束、成本、回撤与样本外结果分开审阅，并把下一步写成可检验假设。以下引用说明了该边界。"
         else:
             answer = "我只基于当前已登记资料回答。请将原文事实、模型推断和研究假设分开，并在证据不足时保留不确定性。以下是可核验资料。"
-        trace = {"id": "trace_" + uuid.uuid4().hex[:12], "mode": mode, "role": role, "question": question, "answer": answer, "citations": [{"id": item["id"], "title": item["title"], "url": item["url"], "excerpt": item["text"][:180]} for item in sources], "tools": [{"name": "retrieval.search", "permission": "Read", "inputSummary": question[:120], "outputSummary": f"返回 {len(sources)} 条可引用资料", "status": "completed"}], "usage": {"engine": "evidence-safe-local", "tokenEstimate": len(question) + len(answer), "cost": 0, "externalCalls": 0}, "boundary": "不执行交易、外部消息、代码或数据写入；构建类输出只可作为人工审核草稿。"}
+        engine, external_calls = "evidence-safe-local", 0
+        base_url, model = os.getenv("AI_QUANT_LAB_LLM_BASE_URL", "").rstrip("/"), os.getenv("AI_QUANT_LAB_LLM_MODEL", "")
+        if sources and base_url and model:
+            try:
+                import requests
+                evidence = "\n".join(f"[{index + 1}] {item['title']}: {item['text'][:700]}" for index, item in enumerate(sources))
+                prompt = "你是受控量化研究助手。只能基于证据回答；不要给出交易指令；不确定时明确说明。每一条事实后标注 [编号]。\n问题：" + question + "\n证据：\n" + evidence
+                response = requests.post(base_url + "/chat/completions", json={"model": model, "messages": [{"role": "system", "content": "你没有工具写入、交易或改变权限。"}, {"role": "user", "content": prompt}], "temperature": 0.1}, timeout=45)
+                response.raise_for_status(); candidate = response.json()["choices"][0]["message"]["content"].strip()
+                if candidate:
+                    answer, engine, external_calls = candidate, "openai-compatible-local", 1
+            except Exception:
+                answer += "\n\n本地模型服务暂不可用，已退化为证据安全模板回答。"
+        trace = {"id": "trace_" + uuid.uuid4().hex[:12], "mode": mode, "role": role, "question": question, "answer": answer, "citations": [{"id": item["id"], "title": item["title"], "url": item["url"], "excerpt": item["text"][:180]} for item in sources], "tools": [{"name": "retrieval.search", "permission": "Read", "inputSummary": question[:120], "outputSummary": f"返回 {len(sources)} 条可引用资料", "status": "completed"}], "usage": {"engine": engine, "tokenEstimate": len(question) + len(answer), "cost": 0, "externalCalls": external_calls}, "boundary": "不执行交易、外部消息、代码或数据写入；构建类输出只可作为人工审核草稿。"}
         return self.store.save("copilot_trace", trace, "copilot_response_created")
+
+    def import_document(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.local_runtime:
+            raise ValueError("私有资料只能导入本地研究服务，不能写入公开云端 API")
+        title, content = str(payload.get("title", "")).strip(), str(payload.get("content", "")).strip()
+        if not title or len(content) < 80:
+            raise ValueError("请提供标题和至少 80 个字符的已授权研究资料")
+        if len(content) > 300_000:
+            raise ValueError("单篇资料超过本地导入限制，请先拆分")
+        chunks = [content[index:index + 1200] for index in range(0, len(content), 1000)]
+        record = {"id": stable_id("doc", {"title": title, "content": content}), "title": title, "source": payload.get("source", "local_import"), "publishedAt": payload.get("publishedAt"), "permission": payload.get("permission", "user_confirmed"), "citationUrl": payload.get("citationUrl", "local://" + title), "chunks": chunks, "status": "local_private", "ingestedAt": now()}
+        return self.store.save("knowledge_document", record, "knowledge_document_imported")
 
     def _knowledge_assets(self) -> List[Dict[str, str]]:
         core = [
@@ -393,6 +448,9 @@ class AIPlatform:
         ]
         for experiment in self.store.list("experiment")[:10]:
             core.append({"id": experiment["id"], "title": "实验 " + experiment["id"], "url": "/ai/experiments/" + experiment["id"], "text": json.dumps(experiment.get("result", {}).get("model", {}).get("card", {}), ensure_ascii=False)})
+        for document in self.store.list("knowledge_document"):
+            for index, chunk in enumerate(document.get("chunks", [])):
+                core.append({"id": document["id"] + "#" + str(index + 1), "title": document.get("title", "本地资料"), "url": document.get("citationUrl", "local://document"), "text": chunk})
         return core
 
     @staticmethod

@@ -789,6 +789,20 @@ def create_copilot_response(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/ai/copilot/documents")
+def list_copilot_documents() -> Dict[str, Any]:
+    documents = RESEARCH_PLATFORM.store.list("knowledge_document")
+    return {"documents": [{key: value for key, value in item.items() if key != "chunks"} | {"chunkCount": len(item.get("chunks", []))} for item in documents]}
+
+
+@app.post("/api/v1/ai/copilot/documents")
+def import_copilot_document(payload: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return RESEARCH_PLATFORM.import_document(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/v1/ai/copilot/traces/{trace_id}")
 def get_copilot_trace(trace_id: str) -> Dict[str, Any]:
     trace = RESEARCH_PLATFORM.store.get(trace_id, "copilot_trace")
