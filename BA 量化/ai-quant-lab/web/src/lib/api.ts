@@ -1,4 +1,4 @@
-import type { BacktestResult, Candle, Quote, Strategy } from "../types";
+import type { AIExperimentRequest, AIExperimentResult, BacktestResult, Candle, Quote, Strategy } from "../types";
 
 const LOCAL_DEFAULT = "http://127.0.0.1:8787";
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
@@ -25,6 +25,31 @@ export const api = {
       `/api/v1/market-data/bars?symbol=${encodeURIComponent(symbol)}&start=${start}&end=${end}&source=${source}`,
     ),
   backtest: (payload: Record<string, unknown>) => request<BacktestResult>("/api/v1/backtests", { method: "POST", body: JSON.stringify(payload) }),
+  aiCapabilities: () => request<{ phase: string; available: string[]; planned: string[]; rqdataLocalOnly: boolean }>("/api/v1/ai/capabilities"),
+  aiExperiment: (payload: AIExperimentRequest) => request<AIExperimentResult>("/api/v1/ai/experiments", { method: "POST", body: JSON.stringify(payload) }),
+  aiDatasets: () => request<{ datasets: Record<string, unknown>[] }>("/api/v1/ai/datasets"),
+  aiBuildDataset: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/datasets/build", { method: "POST", body: JSON.stringify(payload) }),
+  aiFeatures: () => request<{ featureSets: Record<string, unknown>[] }>("/api/v1/ai/features"),
+  aiFeatureSet: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/feature-sets", { method: "POST", body: JSON.stringify(payload) }),
+  aiExperiments: () => request<{ experiments: Record<string, unknown>[] }>("/api/v1/ai/experiments"),
+  aiExperimentDetail: (id: string) => request<Record<string, unknown>>(`/api/v1/ai/experiments/${encodeURIComponent(id)}`),
+  aiCompareExperiments: (experimentIds: string[]) => request<{ comparable: boolean; warning?: string; experiments: Record<string, unknown>[] }>("/api/v1/ai/experiments/compare", { method: "POST", body: JSON.stringify({ experimentIds }) }),
+  aiModels: () => request<{ models: Record<string, unknown>[]; audits: Record<string, unknown>[] }>("/api/v1/ai/models"),
+  aiRegisterModel: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/models/register", { method: "POST", body: JSON.stringify(payload) }),
+  aiPromoteModel: (id: string, payload: Record<string, unknown>) => request<Record<string, unknown>>(`/api/v1/ai/models/${encodeURIComponent(id)}/promote`, { method: "POST", body: JSON.stringify(payload) }),
+  aiPortfolios: () => request<{ portfolios: Record<string, unknown>[] }>("/api/v1/ai/portfolios"),
+  aiBuildPortfolio: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/portfolios/build", { method: "POST", body: JSON.stringify(payload) }),
+  aiEvaluations: () => request<{ evaluations: Record<string, unknown>[] }>("/api/v1/ai/evaluations"),
+  aiEvaluation: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/evaluations", { method: "POST", body: JSON.stringify(payload) }),
+  aiRlValidate: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/rl/environments/validate", { method: "POST", body: JSON.stringify(payload) }),
+  aiRlRun: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/rl/runs", { method: "POST", body: JSON.stringify(payload) }),
+  aiRlRuns: () => request<{ runs: Record<string, unknown>[] }>("/api/v1/ai/rl/runs"),
+  aiDeepLearningRun: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/deep-learning/runs", { method: "POST", body: JSON.stringify(payload) }),
+  aiDeepLearningRuns: () => request<{ runs: Record<string, unknown>[] }>("/api/v1/ai/deep-learning/runs"),
+  aiCopilot: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/copilot/responses", { method: "POST", body: JSON.stringify(payload) }),
+  aiNegativeResults: () => request<{ negativeResults: Record<string, unknown>[] }>("/api/v1/ai/negative-results"),
+  aiSaveNegativeResult: (payload: Record<string, unknown>) => request<Record<string, unknown>>("/api/v1/ai/negative-results", { method: "POST", body: JSON.stringify(payload) }),
+  aiMonitoring: () => request<Record<string, unknown>>("/api/v1/ai/monitoring"),
 };
 
 export const loadSnapshot = async (): Promise<{ updatedAt?: string; quotes?: Quote[] }> => {

@@ -1,0 +1,11 @@
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends python3.11 python3-pip git && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements-gpu.txt requirements.txt ./
+RUN python3.11 -m pip install --upgrade pip && python3.11 -m pip install --extra-index-url https://download.pytorch.org/whl/cu124 -r requirements-gpu.txt
+COPY . /app
+ENV AI_QUANT_LAB_RUNTIME=local AI_QUANT_LAB_GPU_ENABLED=true AI_QUANT_LAB_ARTIFACT_DIR=/data/artifacts AI_QUANT_LAB_RESEARCH_DIR=/data/research
+EXPOSE 8787
+CMD ["python3.11", "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8787"]

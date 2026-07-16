@@ -78,3 +78,44 @@ export type Experiment = {
   summary: BacktestSummary;
   config: Record<string, unknown>;
 };
+
+export type AIExperimentRequest = {
+  universe: string[];
+  start: string;
+  end: string;
+  horizon: number;
+  topK: number;
+  transactionCost: number;
+  source?: "auto" | "akshare" | "yfinance" | "rqdata";
+  task?: "ranking" | "regression" | "classification";
+  model?: "ridge" | "linear" | "elastic_net" | "random_forest" | "gradient_boosting";
+  splitMode?: "forward" | "walk_forward";
+  walkForwardFolds?: number;
+};
+
+export type AIExperimentResult = {
+  id: string;
+  status: "completed";
+  engine: string;
+  configHash: string;
+  dataFingerprint: string;
+  dataset: {
+    symbols: Array<{ symbol: string; name: string; source: string; bars: number; firstDate: string; lastDate: string }>;
+    featureNames: string[];
+    sampleCount: number;
+    dataSources: string[];
+  };
+  split: { trainEnd: string; validationStart: string; validationEnd: string; testStart: string; testEnd: string; embargoDays: number; trainSamples: number; validationSamples: number; testSamples: number };
+  model: {
+    name: string;
+    type: string;
+    alpha: number;
+    featureCoefficients: Array<{ feature: string; coefficient: number; scale: number }>;
+    card: { purpose: string; status: string; limitations: string[] };
+  };
+  metrics: { rankIc: number; validationRankIc: number; totalReturn: number; benchmarkReturn: number; maxDrawdown: number; sharpe: number; turnover: number; rebalances: number };
+  baseline: { name: string; totalReturn: number; maxDrawdown: number; sharpe: number };
+  equity: Array<{ date: string; equity: number; benchmark: number; drawdown: number }>;
+  holdings: Array<{ date: string; symbols: string[]; names: string[]; scores: number[] }>;
+  warnings: string[];
+};

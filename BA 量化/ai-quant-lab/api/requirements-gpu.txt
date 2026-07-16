@@ -1,0 +1,6 @@
+-r requirements.txt
+torch>=2.5
+gymnasium>=1.0
+stable-baselines3>=2.5
+sentence-transformers>=3.3
+pypdf>=5.0
