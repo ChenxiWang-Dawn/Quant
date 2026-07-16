@@ -87,6 +87,10 @@ export type AIExperimentRequest = {
   topK: number;
   transactionCost: number;
   source?: "auto" | "akshare" | "yfinance" | "rqdata";
+  task?: "ranking" | "regression" | "classification";
+  model?: "ridge" | "linear" | "elastic_net" | "random_forest" | "gradient_boosting";
+  splitMode?: "forward" | "walk_forward";
+  walkForwardFolds?: number;
 };
 
 export type AIExperimentResult = {

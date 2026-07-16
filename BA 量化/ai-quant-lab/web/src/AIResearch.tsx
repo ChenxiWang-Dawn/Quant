@@ -38,6 +38,8 @@ export default function AIResearchLab() {
   const [horizon, setHorizon] = useState(10);
   const [topK, setTopK] = useState(5);
   const [cost, setCost] = useState(0.001);
+  const [model, setModel] = useState<AIExperimentRequest["model"]>("ridge");
+  const [splitMode, setSplitMode] = useState<AIExperimentRequest["splitMode"]>("forward");
   const [result, setResult] = useState<AIExperimentResult | null>(null);
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
@@ -46,7 +48,7 @@ export default function AIResearchLab() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(""); setResult(null); setRunning(true);
-    const payload: AIExperimentRequest = { universe: symbols, start, end, horizon, topK, transactionCost: cost, source: "auto" };
+    const payload: AIExperimentRequest = { universe: symbols, start, end, horizon, topK, transactionCost: cost, source: "auto", task: "ranking", model, splitMode, walkForwardFolds: splitMode === "walk_forward" ? 3 : 1 };
     try { setResult(await api.aiExperiment(payload)); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "实验运行失败，请稍后重试。"); }
     finally { setRunning(false); }
@@ -55,7 +57,7 @@ export default function AIResearchLab() {
   return <div className="ai-research-page">
     <section className="ai-hero wrap">
       <div><p className="eyebrow">AI RESEARCH LAB / PHASE 1</p><h1>从可复现的基线，<br /><em>开始 AI 量化研究。</em></h1><p>先把数据、时间切分、成本和基准说清楚。这个工作台会用历史价格与成交量，构建一个透明的横截面选股基线。</p></div>
-      <aside className="ai-guardrail"><span>研究边界</span><b>先验证，再扩展</b><p>目前上线的是线性模型基线；深度学习、强化学习与大模型研究助手仍在后续路线图中。</p></aside>
+      <aside className="ai-guardrail"><span>研究边界</span><b>先验证，再扩展</b><p>传统模型可在线研究；深度学习仅在本地受控环境训练；强化学习只做历史仿真；助手只输出带引用的研究材料。</p></aside>
     </section>
 
     <section className="wrap ai-workbench">
@@ -63,7 +65,7 @@ export default function AIResearchLab() {
         <div className="ai-panel-heading"><div><p className="eyebrow">01 / CONFIGURE</p><h2>配置一次实验</h2></div><span className="ai-stage">可运行</span></div>
         <label>标的池 <small>至少 4 个，用逗号、空格或换行分隔</small><textarea value={universe} onChange={(event) => setUniverse(event.target.value)} rows={4} spellCheck="false" /></label>
         <p className="ai-symbol-count">已识别 {symbols.length} 个标的 · 将自动显示证券名称并剔除无效数据</p>
-        <div className="ai-form-grid"><label>开始日期<input type="date" value={start} onChange={(event) => setStart(event.target.value)} required /></label><label>结束日期<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} required /></label><label>持有期<select value={horizon} onChange={(event) => setHorizon(Number(event.target.value))}><option value={5}>5 个交易日</option><option value={10}>10 个交易日</option><option value={20}>20 个交易日</option></select></label><label>Top-K<select value={topK} onChange={(event) => setTopK(Number(event.target.value))}>{[2, 3, 4, 5, 6, 8].map((item) => <option key={item} value={item}>{item} 只股票</option>)}</select></label><label>单边交易成本<input type="number" value={cost} min="0" max="0.02" step="0.0001" onChange={(event) => setCost(Number(event.target.value))} /><small>0.001 = 10 个基点</small></label></div>
+        <div className="ai-form-grid"><label>开始日期<input type="date" value={start} onChange={(event) => setStart(event.target.value)} required /></label><label>结束日期<input type="date" value={end} onChange={(event) => setEnd(event.target.value)} required /></label><label>持有期<select value={horizon} onChange={(event) => setHorizon(Number(event.target.value))}><option value={5}>5 个交易日</option><option value={10}>10 个交易日</option><option value={20}>20 个交易日</option></select></label><label>Top-K<select value={topK} onChange={(event) => setTopK(Number(event.target.value))}>{[2, 3, 4, 5, 6, 8].map((item) => <option key={item} value={item}>{item} 只股票</option>)}</select></label><label>候选模型<select value={model} onChange={(event) => setModel(event.target.value as AIExperimentRequest["model"])}><option value="ridge">Ridge 线性基线</option><option value="linear">线性回归</option><option value="elastic_net">Elastic Net</option><option value="random_forest">随机森林</option><option value="gradient_boosting">梯度提升树</option></select><small>始终与 Ridge 和等权基准比较</small></label><label>验证方式<select value={splitMode} onChange={(event) => setSplitMode(event.target.value as AIExperimentRequest["splitMode"])}><option value="forward">单次前向切分</option><option value="walk_forward">3 折 Walk-Forward</option></select><small>时间顺序不可随机打乱</small></label><label>单边交易成本<input type="number" value={cost} min="0" max="0.02" step="0.0001" onChange={(event) => setCost(Number(event.target.value))} /><small>0.001 = 10 个基点</small></label></div>
         <div className="ai-method-note"><b>本次方法</b><span>日频 OHLCV → 历史特征 → 60/20/20 时间切分 → 验证集检查 → 测试集 Top-K 等权组合</span></div>
         <button className="button ai-run" type="submit" disabled={running || symbols.length < 4}>{running ? "正在拉取数据并运行实验…" : "运行 AI 选股实验 →"}</button>
         <p className="disclaimer">RQData 仅在本地服务可用；在线部署会自动使用 AkShare 或 yfinance。历史结果不构成投资建议。</p>
@@ -82,7 +84,7 @@ export default function AIResearchLab() {
       <div className="ai-warnings"><b>研究记录与限制</b>{result.warnings.map((warning) => <p key={warning}>{warning}</p>)}<small>配置哈希：{result.configHash} · 数据指纹：{result.dataFingerprint}</small></div>
     </section>}
 
-    <section className="wrap ai-roadmap"><p className="eyebrow">WHAT'S NEXT</p><h2>研究能力路线图</h2><div><article><span>下一阶段</span><h3>深度学习</h3><p>时序模型、walk-forward 验证、特征重要性与漂移监控。</p></article><article><span>下一阶段</span><h3>强化学习</h3><p>先用受成本与风险约束的模拟环境，再评估策略层面的决策。</p></article><article><span>下一阶段</span><h3>大模型研究助手</h3><p>带证据来源、审批与审计日志的研究解释和工作流协作。</p></article></div></section>
+    <section className="wrap ai-roadmap"><p className="eyebrow">RESEARCH CAPABILITIES</p><h2>受控扩展能力</h2><div><article><span>本地训练</span><h3>深度学习</h3><p>MLP 多种子、早停与梯度裁剪已可用；TCN、GRU/LSTM、Transformer 必须先通过基线 Gate。</p><Link to="/ai/deep-learning">打开深度学习基线 →</Link></article><article><span>仿真限定</span><h3>强化学习</h3><p>环境先做未来数据与成本单调性测试，再运行多种子受约束配置仿真。</p><Link to="/ai/rl">打开 RL 实验室 →</Link></article><article><span>证据优先</span><h3>研究助手</h3><p>四个专业角色、可核验引用、工具轨迹和最小权限；不具备交易或外部写入权限。</p><Link to="/ai/copilot">打开研究助手 →</Link></article></div></section>
   </div>;
 }
 

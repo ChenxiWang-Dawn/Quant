@@ -2,6 +2,7 @@ fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 pandas>=2.0
 numpy>=1.26
+scikit-learn>=1.4
 requests>=2.31
 akshare>=1.15
 yfinance>=0.2

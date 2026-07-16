@@ -5,6 +5,7 @@ import { strategies, strategyById } from "./data/strategies";
 import { indicatorGuides, type IndicatorCategory, type IndicatorGuide } from "./indicator-library";
 import { formulaByIndicator, type FormulaGuide } from "./indicator-formulas";
 import AIResearchLab from "./AIResearch";
+import AIPlatformPage from "./AIPlatform";
 import type { BacktestResult, Candle, Experiment, Quote, Strategy } from "./types";
 
 const fmtPct = (value?: number) => (value === undefined || Number.isNaN(value) ? "—" : `${(value * 100).toFixed(2)}%`);
@@ -23,6 +24,26 @@ function App() {
           <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
           <Route path="/strategies/:strategyId/lab" element={<StrategyLab />} />
           <Route path="/ai" element={<AIResearchLab />} />
+          <Route path="/ai/getting-started" element={<AIPlatformPage />} />
+          <Route path="/ai/datasets" element={<AIPlatformPage />} />
+          <Route path="/ai/datasets/:datasetId" element={<AIPlatformPage />} />
+          <Route path="/ai/features" element={<AIPlatformPage />} />
+          <Route path="/ai/features/:featureSetId" element={<AIPlatformPage />} />
+          <Route path="/ai/experiments" element={<AIPlatformPage />} />
+          <Route path="/ai/experiments/new" element={<AIPlatformPage />} />
+          <Route path="/ai/experiments/:runId" element={<AIPlatformPage />} />
+          <Route path="/ai/models" element={<AIPlatformPage />} />
+          <Route path="/ai/models/:modelId" element={<AIPlatformPage />} />
+          <Route path="/ai/portfolios" element={<AIPlatformPage />} />
+          <Route path="/ai/portfolios/:runId" element={<AIPlatformPage />} />
+          <Route path="/ai/evaluations" element={<AIPlatformPage />} />
+          <Route path="/ai/deep-learning" element={<AIPlatformPage />} />
+          <Route path="/ai/rl" element={<AIPlatformPage />} />
+          <Route path="/ai/rl/:runId" element={<AIPlatformPage />} />
+          <Route path="/ai/copilot" element={<AIPlatformPage />} />
+          <Route path="/ai/negative-results" element={<AIPlatformPage />} />
+          <Route path="/ai/monitoring" element={<AIPlatformPage />} />
+          <Route path="/ai/methodology" element={<AIPlatformPage />} />
           <Route path="/experiments" element={<Experiments />} />
           <Route path="/guide" element={<BeginnerGuide />} />
           <Route path="/indicators" element={<IndicatorLibrary />} />
