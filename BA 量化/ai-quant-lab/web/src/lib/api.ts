@@ -1,4 +1,4 @@
-import type { BacktestResult, Candle, Quote, Strategy } from "../types";
+import type { AIExperimentRequest, AIExperimentResult, BacktestResult, Candle, Quote, Strategy } from "../types";
 
 const LOCAL_DEFAULT = "http://127.0.0.1:8787";
 const configuredBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "");
@@ -25,6 +25,8 @@ export const api = {
       `/api/v1/market-data/bars?symbol=${encodeURIComponent(symbol)}&start=${start}&end=${end}&source=${source}`,
     ),
   backtest: (payload: Record<string, unknown>) => request<BacktestResult>("/api/v1/backtests", { method: "POST", body: JSON.stringify(payload) }),
+  aiCapabilities: () => request<{ phase: string; available: string[]; planned: string[]; rqdataLocalOnly: boolean }>("/api/v1/ai/capabilities"),
+  aiExperiment: (payload: AIExperimentRequest) => request<AIExperimentResult>("/api/v1/ai/experiments", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 export const loadSnapshot = async (): Promise<{ updatedAt?: string; quotes?: Quote[] }> => {

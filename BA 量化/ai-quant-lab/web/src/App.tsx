@@ -4,6 +4,7 @@ import { api, getApiBase, loadSnapshot, setApiBase } from "./lib/api";
 import { strategies, strategyById } from "./data/strategies";
 import { indicatorGuides, type IndicatorCategory, type IndicatorGuide } from "./indicator-library";
 import { formulaByIndicator, type FormulaGuide } from "./indicator-formulas";
+import AIResearchLab from "./AIResearch";
 import type { BacktestResult, Candle, Experiment, Quote, Strategy } from "./types";
 
 const fmtPct = (value?: number) => (value === undefined || Number.isNaN(value) ? "—" : `${(value * 100).toFixed(2)}%`);
@@ -21,6 +22,7 @@ function App() {
           <Route path="/strategies" element={<StrategyCatalog />} />
           <Route path="/strategies/:strategyId" element={<StrategyDetail />} />
           <Route path="/strategies/:strategyId/lab" element={<StrategyLab />} />
+          <Route path="/ai" element={<AIResearchLab />} />
           <Route path="/experiments" element={<Experiments />} />
           <Route path="/guide" element={<BeginnerGuide />} />
           <Route path="/indicators" element={<IndicatorLibrary />} />
@@ -46,6 +48,7 @@ function Header() {
         <NavLink to="/" end>首页</NavLink>
         <NavLink to="/strategies">策略库</NavLink>
         <NavLink to="/strategies/ma_cross/lab">行情研究</NavLink>
+        <NavLink to="/ai">AI 研究</NavLink>
         <NavLink to="/experiments">实验</NavLink>
         <NavLink to="/guide">新手指南</NavLink>
         <NavLink to="/indicators">指标百科</NavLink>

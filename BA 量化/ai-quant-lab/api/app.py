@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import math
 import os
 import sys
 import time
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 import pandas as pd
+import numpy as np
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -79,6 +81,18 @@ class BacktestRequest(BaseModel):
     execution: Execution = Field(default_factory=Execution)
     benchmark: Optional[str] = None
     candles: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AIExperimentRequest(BaseModel):
+    """A deliberately small, reproducible first version of the AI research lab."""
+
+    universe: List[str] = Field(min_length=4, max_length=12)
+    start: str
+    end: str
+    horizon: int = Field(default=10, ge=5, le=30)
+    topK: int = Field(default=5, ge=2, le=10)
+    transactionCost: float = Field(default=0.001, ge=0, le=0.02)
+    source: Literal["auto", "akshare", "yfinance", "rqdata"] = "auto"
 
 
 def optional_import(name: str):
@@ -279,6 +293,191 @@ def validate_params(item: Dict[str, Any], params: Dict[str, float]) -> None:
         raise ValueError("退出窗口必须小于入场窗口")
 
 
+AI_FEATURES = ["momentum_5", "momentum_20", "volatility_20", "volume_zscore_20"]
+
+
+def ai_feature_frame(candles: List[Dict[str, Any]], symbol: str, name: str, horizon: int) -> pd.DataFrame:
+    """Create only historical, close-of-day features and a next-open forward label."""
+    frame = pd.DataFrame(candles)
+    if frame.empty:
+        return frame
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.sort_values("date").drop_duplicates("date").set_index("date")
+    close = pd.to_numeric(frame["close"], errors="coerce")
+    opening = pd.to_numeric(frame["open"], errors="coerce")
+    volume = pd.to_numeric(frame["volume"], errors="coerce").fillna(0)
+    output = pd.DataFrame(index=frame.index)
+    output["momentum_5"] = close.pct_change(5)
+    output["momentum_20"] = close.pct_change(20)
+    output["volatility_20"] = close.pct_change().rolling(20).std()
+    volume_std = volume.rolling(20).std().replace(0, np.nan)
+    output["volume_zscore_20"] = (volume - volume.rolling(20).mean()) / volume_std
+    # A signal observed after today's close is assumed to enter at the next open.
+    output["target"] = close.shift(-horizon) / opening.shift(-1) - 1
+    output["symbol"] = symbol
+    output["name"] = name
+    return output.reset_index()
+
+
+def fit_ridge(frame: pd.DataFrame, alpha: float = 3.0) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    features = frame[AI_FEATURES].to_numpy(dtype=float)
+    target = frame["target"].to_numpy(dtype=float)
+    means = features.mean(axis=0)
+    scales = features.std(axis=0)
+    scales[scales < 1e-10] = 1.0
+    standardized = (features - means) / scales
+    target_mean = float(target.mean())
+    coefficients = np.linalg.pinv(standardized.T @ standardized + alpha * np.eye(len(AI_FEATURES))) @ (standardized.T @ (target - target_mean))
+    return coefficients, means, scales, target_mean
+
+
+def ridge_predict(frame: pd.DataFrame, fitted: tuple[np.ndarray, np.ndarray, np.ndarray, float]) -> np.ndarray:
+    coefficients, means, scales, target_mean = fitted
+    features = frame[AI_FEATURES].to_numpy(dtype=float)
+    return ((features - means) / scales) @ coefficients + target_mean
+
+
+def mean_rank_ic(frame: pd.DataFrame) -> float:
+    values: List[float] = []
+    for _, group in frame.groupby("date"):
+        if len(group) < 4 or group["prediction"].nunique() < 2 or group["target"].nunique() < 2:
+            continue
+        correlation = group["prediction"].corr(group["target"], method="spearman")
+        if pd.notna(correlation):
+            values.append(float(correlation))
+    return float(np.mean(values)) if values else 0.0
+
+
+def ai_equity_curve(test_frame: pd.DataFrame, horizon: int, top_k: int, transaction_cost: float) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, float]]:
+    dates = sorted(pd.to_datetime(test_frame["date"].unique()))[::horizon]
+    equity = 1.0
+    benchmark = 1.0
+    peak = 1.0
+    max_drawdown = 0.0
+    period_returns: List[float] = []
+    turnover_values: List[float] = []
+    curve: List[Dict[str, Any]] = []
+    holdings: List[Dict[str, Any]] = []
+    previous: set[str] = set()
+
+    for timestamp in dates:
+        snapshot = test_frame.loc[test_frame["date"] == timestamp].sort_values("prediction", ascending=False)
+        if len(snapshot) < top_k:
+            continue
+        selected = snapshot.head(top_k)
+        selected_symbols = selected["symbol"].tolist()
+        turnover = 1.0 if not previous else 1.0 - len(previous.intersection(selected_symbols)) / top_k
+        # The first rebalance buys the portfolio; subsequent rebalances sell the
+        # changing part and buy the replacement part.  Cost is explicitly post-return.
+        cost = transaction_cost if not previous else transaction_cost * (2 * turnover)
+        portfolio_return = float(selected["target"].mean()) - cost
+        benchmark_return = float(snapshot["target"].mean()) - (transaction_cost if not previous else 0.0)
+        equity *= 1 + portfolio_return
+        benchmark *= 1 + benchmark_return
+        peak = max(peak, equity)
+        drawdown = equity / peak - 1
+        max_drawdown = min(max_drawdown, drawdown)
+        curve.append({"date": pd.Timestamp(timestamp).strftime("%Y-%m-%d"), "equity": float(equity), "benchmark": float(benchmark), "drawdown": float(drawdown)})
+        holdings.append({"date": pd.Timestamp(timestamp).strftime("%Y-%m-%d"), "symbols": selected_symbols, "names": selected["name"].tolist(), "scores": [float(value) for value in selected["prediction"].tolist()]})
+        period_returns.append(portfolio_return)
+        turnover_values.append(turnover)
+        previous = set(selected_symbols)
+
+    annualizer = math.sqrt(252 / horizon)
+    dispersion = float(np.std(period_returns, ddof=1)) if len(period_returns) > 1 else 0.0
+    sharpe = float(np.mean(period_returns) / dispersion * annualizer) if dispersion > 1e-12 else 0.0
+    return curve, holdings, {
+        "totalReturn": float(equity - 1),
+        "benchmarkReturn": float(benchmark - 1),
+        "maxDrawdown": float(max_drawdown),
+        "sharpe": sharpe,
+        "turnover": float(np.mean(turnover_values)) if turnover_values else 0.0,
+        "rebalances": len(curve),
+    }
+
+
+def create_ai_experiment(request: AIExperimentRequest) -> Dict[str, Any]:
+    unique_symbols = list(dict.fromkeys(normalize_symbol(symbol) for symbol in request.universe if str(symbol).strip()))
+    if len(unique_symbols) < 4:
+        raise ValueError("请至少输入 4 个不重复的标的")
+    if request.topK >= len(unique_symbols):
+        raise ValueError("Top-K 必须小于标的池数量，才能形成横截面比较")
+    start, end = pd.Timestamp(request.start), pd.Timestamp(request.end)
+    if end <= start:
+        raise ValueError("结束日期必须晚于开始日期")
+
+    warnings: List[str] = []
+    assets: List[Dict[str, Any]] = []
+    frames: List[pd.DataFrame] = []
+    for symbol in unique_symbols:
+        try:
+            provider, normalized, name, candles = fetch_bars(symbol, request.start, request.end, "1d", "pre", request.source)
+            feature_frame = ai_feature_frame(candles, normalized, name, request.horizon)
+            if len(feature_frame) < 80:
+                warnings.append(normalized + " 的有效历史不足，已跳过")
+                continue
+            frames.append(feature_frame)
+            assets.append({"symbol": normalized, "name": name, "source": provider, "bars": len(candles), "firstDate": candles[0]["date"], "lastDate": candles[-1]["date"]})
+        except Exception as exc:
+            warnings.append(normalize_symbol(symbol) + " 获取失败：" + str(exc)[:100])
+
+    if len(frames) < 4:
+        raise ValueError("可用标的少于 4 个，无法进行横截面实验。" + "；".join(warnings[:3]))
+    data = pd.concat(frames, ignore_index=True).replace([np.inf, -np.inf], np.nan).dropna(subset=AI_FEATURES + ["target"])
+    per_date = data.groupby("date")["symbol"].nunique()
+    eligible_dates = per_date[per_date >= max(4, request.topK)].index.sort_values()
+    data = data[data["date"].isin(eligible_dates)].copy()
+    dates = list(eligible_dates)
+    if len(dates) < 150:
+        raise ValueError("有效交易日不足 150 天，请扩大研究区间或更换标的池")
+
+    train_end_index = int(len(dates) * 0.6) - 1
+    validation_start_index = train_end_index + 1 + request.horizon
+    validation_end_index = validation_start_index + max(20, int(len(dates) * 0.2)) - 1
+    test_start_index = validation_end_index + 1 + request.horizon
+    if test_start_index >= len(dates) - request.horizon:
+        raise ValueError("区间不足以形成训练、验证、测试与 embargo；请增加历史数据")
+    train_dates = dates[: train_end_index + 1]
+    validation_dates = dates[validation_start_index : validation_end_index + 1]
+    test_dates = dates[test_start_index:]
+    train = data[data["date"].isin(train_dates)].copy()
+    validation = data[data["date"].isin(validation_dates)].copy()
+    test = data[data["date"].isin(test_dates)].copy()
+    if min(len(train), len(validation), len(test)) < 80:
+        raise ValueError("各时间切分中的样本不足，请扩大研究区间")
+
+    validation_fit = fit_ridge(train)
+    validation["prediction"] = ridge_predict(validation, validation_fit)
+    final_fit = fit_ridge(pd.concat([train, validation], ignore_index=True))
+    test["prediction"] = ridge_predict(test, final_fit)
+    curve, holdings, metrics = ai_equity_curve(test, request.horizon, request.topK, request.transactionCost)
+    if len(curve) < 4:
+        raise ValueError("测试期再平衡次数不足，请扩大研究区间")
+
+    equal_weight_returns = [item["benchmark"] / (curve[index - 1]["benchmark"] if index else 1.0) - 1 for index, item in enumerate(curve)]
+    baseline_dispersion = float(np.std(equal_weight_returns, ddof=1)) if len(equal_weight_returns) > 1 else 0.0
+    baseline_sharpe = float(np.mean(equal_weight_returns) / baseline_dispersion * math.sqrt(252 / request.horizon)) if baseline_dispersion > 1e-12 else 0.0
+    coefficient, _, scales, _ = final_fit
+    data_source = sorted({asset["source"] for asset in assets})
+    config_payload = request.model_dump() | {"universe": [asset["symbol"] for asset in assets], "alpha": 3.0, "split": "60/20/20 chronological with embargo"}
+    fingerprint_payload = [{key: asset[key] for key in ("symbol", "source", "bars", "firstDate", "lastDate")} for asset in assets]
+    return {
+        "id": "ai-" + hashlib.sha256((json.dumps(config_payload, sort_keys=True) + json.dumps(fingerprint_payload, sort_keys=True)).encode()).hexdigest()[:12],
+        "status": "completed",
+        "engine": "ai-research-mvp",
+        "configHash": hashlib.sha256(json.dumps(config_payload, sort_keys=True, default=str).encode()).hexdigest()[:16],
+        "dataFingerprint": hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode()).hexdigest()[:16],
+        "dataset": {"symbols": assets, "featureNames": AI_FEATURES, "sampleCount": int(len(data)), "dataSources": data_source},
+        "split": {"trainEnd": pd.Timestamp(train_dates[-1]).strftime("%Y-%m-%d"), "validationStart": pd.Timestamp(validation_dates[0]).strftime("%Y-%m-%d"), "validationEnd": pd.Timestamp(validation_dates[-1]).strftime("%Y-%m-%d"), "testStart": pd.Timestamp(test_dates[0]).strftime("%Y-%m-%d"), "testEnd": pd.Timestamp(test_dates[-1]).strftime("%Y-%m-%d"), "embargoDays": request.horizon, "trainSamples": len(train), "validationSamples": len(validation), "testSamples": len(test)},
+        "model": {"name": "Ridge Cross-Sectional Ranker", "type": "linear_regression", "alpha": 3.0, "featureCoefficients": [{"feature": feature, "coefficient": float(value), "scale": float(scale)} for feature, value, scale in zip(AI_FEATURES, coefficient, scales)], "card": {"purpose": "使用历史价格与成交量特征，对未来持有期收益排序，再构造 Top-K 等权组合。", "status": "research baseline", "limitations": ["仅使用日频 OHLCV，未接入基本面、行业与宏观数据。", "模型为线性基线，不能证明因果关系或未来有效性。", "结果已扣除设定交易成本，但未覆盖停牌、涨跌停与完整税费。"]}},
+        "metrics": metrics | {"rankIc": mean_rank_ic(test), "validationRankIc": mean_rank_ic(validation)},
+        "baseline": {"name": "测试期等权全市场篮子", "totalReturn": float(curve[-1]["benchmark"] - 1), "maxDrawdown": float(min(item["benchmark"] / max(point["benchmark"] for point in curve[: index + 1]) - 1 for index, item in enumerate(curve))), "sharpe": baseline_sharpe},
+        "equity": curve,
+        "holdings": holdings,
+        "warnings": warnings + ["研究基线采用严格时间切分，并在训练、验证、测试之间设置持有期长度的 embargo。", "历史回测不代表未来表现；本页面不构成投资建议。"],
+    }
+
+
 @app.get("/api/v1/health")
 def health() -> Dict[str, Any]:
     return {"ok": True, "service": "ai-quant-lab-api", "runtime": "local" if LOCAL_RUNTIME else "cloud", "providers": provider_status(), "rqdataLocalOnly": True, "allowedOrigins": len(ALLOWED_ORIGINS)}
@@ -312,6 +511,26 @@ def market_quote(symbol: str = Query(min_length=1, max_length=24)) -> Dict[str, 
         return quote(symbol)
     except Exception as exc:
         raise HTTPException(status_code=502, detail={"error": {"code": "QUOTE_UNAVAILABLE", "message": str(exc), "retryable": True}}) from exc
+
+
+@app.get("/api/v1/ai/capabilities")
+def ai_capabilities() -> Dict[str, Any]:
+    return {
+        "phase": "P0 / Phase 1",
+        "available": ["cross_sectional_selection", "chronological_validation", "cost_aware_backtest", "model_card"],
+        "planned": ["deep_learning", "reinforcement_learning", "llm_research_copilot"],
+        "rqdataLocalOnly": True,
+    }
+
+
+@app.post("/api/v1/ai/experiments")
+def run_ai_experiment(request: AIExperimentRequest) -> Dict[str, Any]:
+    try:
+        return create_ai_experiment(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"error": {"code": "AI_EXPERIMENT_INVALID", "message": str(exc), "retryable": False}}) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail={"error": {"code": "AI_EXPERIMENT_FAILED", "message": str(exc), "retryable": True}}) from exc
 
 
 @app.post("/api/v1/backtests")

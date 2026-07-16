@@ -7,6 +7,7 @@ import "./market-chart.css";
 import "./product-experience.css";
 import "./indicator-library.css";
 import "./indicator-learning.css";
+import "./ai-research.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
