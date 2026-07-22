@@ -1,16 +1,6 @@
 {
-  "updatedAt": "2026-07-22T06:42:30.259659+00:00",
+  "updatedAt": "2026-07-22T10:34:30.368473+00:00",
   "quotes": [
-    {
-      "symbol": "000001.XSHE",
-      "name": "000001",
-      "price": 10.95,
-      "change": 0.10999999999999943,
-      "changePercent": 0.010147601476014678,
-      "asOf": "2026-07-22",
-      "source": "akshare daily snapshot",
-      "delayed": true
-    },
     {
       "symbol": "AAPL",
       "name": "AAPL",
