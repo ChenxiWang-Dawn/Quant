@@ -1,23 +1,23 @@
 {
-  "updatedAt": "2026-07-22T23:19:36.005924+00:00",
+  "updatedAt": "2026-07-23T03:47:47.288237+00:00",
   "quotes": [
     {
       "symbol": "000001.XSHE",
       "name": "平安银行",
-      "price": 10.98,
-      "change": 0.14,
-      "changePercent": 0.0129,
-      "asOf": "2026-07-22T23:17:24.449241+00:00",
+      "price": 11.09,
+      "change": 0.11,
+      "changePercent": 0.01,
+      "asOf": "2026-07-23T03:45:25.025937+00:00",
       "source": "akshare snapshot",
       "delayed": true
     },
     {
       "symbol": "600519.XSHG",
       "name": "贵州茅台",
-      "price": 1305.0,
-      "change": -3.0,
-      "changePercent": -0.0023,
-      "asOf": "2026-07-22T23:19:35.315776+00:00",
+      "price": 1297.76,
+      "change": -7.24,
+      "changePercent": -0.0055000000000000005,
+      "asOf": "2026-07-23T03:47:46.506733+00:00",
       "source": "akshare snapshot",
       "delayed": true
     },
