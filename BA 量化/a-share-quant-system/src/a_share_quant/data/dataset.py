@@ -58,7 +58,7 @@ class DatasetBundle:
     )
 
     @classmethod
-    def load(cls, root: str | Path) -> "DatasetBundle":
+    def load(cls, root: str | Path) -> DatasetBundle:
         path = Path(root)
         if not path.exists():
             raise FileNotFoundError(path)

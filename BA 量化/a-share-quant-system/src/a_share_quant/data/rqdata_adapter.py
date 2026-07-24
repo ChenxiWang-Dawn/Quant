@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ class RQDataSyncConfig:
 
 
 class RQDataAdapter:
-    FACTOR_FIELDS = [
+    FACTOR_FIELDS: ClassVar[tuple[str, ...]] = (
         "return_on_equity_ttm",
         "gross_profit_margin_ttm",
         "operating_cash_flow_per_share_ttm",
@@ -33,7 +33,7 @@ class RQDataAdapter:
         "pb_ratio",
         "operating_revenue_growth_ratio_ttm",
         "net_profit_growth_ratio_ttm",
-    ]
+    )
 
     def __init__(self, client: Any | None = None) -> None:
         if client is None:
