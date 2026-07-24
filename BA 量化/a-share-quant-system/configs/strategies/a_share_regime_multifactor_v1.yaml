@@ -1,0 +1,32 @@
+id: a_share_regime_multifactor_v1
+version: 1.0.0
+rebalance_weekday: 4
+target_holdings: 40
+feature:
+  winsor_lower: 0.01
+  winsor_upper: 0.99
+  neutralize_industry: true
+  neutralize_log_market_cap: true
+alpha:
+  quality_weight: 0.25
+  value_weight: 0.20
+  momentum_weight: 0.25
+  earnings_event_weight: 0.15
+  breakout_weight: 0.15
+  penalty_weight: 1.0
+regime:
+  fast_window: 60
+  slow_window: 120
+  volatility_window: 20
+  high_volatility: 0.035
+  risk_on_exposure: 0.95
+  neutral_exposure: 0.75
+  risk_off_exposure: 0.50
+portfolio:
+  builder: topk
+  target_holdings: 40
+  exit_rank: 70
+  max_stock_weight: 0.03
+  max_sector_weight: 0.20
+  max_weekly_one_way_turnover: 0.25
+  max_adv_participation: 0.05

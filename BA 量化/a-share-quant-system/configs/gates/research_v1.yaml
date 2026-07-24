@@ -1,0 +1,7 @@
+id: gate_research_v1
+min_annualized_excess_return: 0.0
+min_information_ratio: 0.6
+max_drawdown: 0.25
+require_adverse_cost_positive_excess: true
+max_single_year_contribution: 0.35
+max_single_industry_contribution: 0.35

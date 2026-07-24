@@ -1,0 +1,12 @@
+version: cn_a_share_liquid_v1.0.0
+min_listing_days: 250
+min_price_cny: 3.0
+min_adv20_cny: 50000000
+min_valid_days_20: 15
+exclude_risk_warning: true
+exclude_delisting: true
+exclude_suspended: true
+allowed_boards:
+  - main
+  - chinext
+  - star

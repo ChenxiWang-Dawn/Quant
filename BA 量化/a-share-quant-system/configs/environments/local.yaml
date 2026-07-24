@@ -1,0 +1,12 @@
+environment: local
+timezone: Asia/Shanghai
+storage_root: storage
+artifact_root: artifacts
+metadata_database: storage/metadata/system.db
+api:
+  host: 127.0.0.1
+  port: 8788
+jobs:
+  max_workers: 2
+  daily_priority: 100
+  research_priority: 10
