@@ -1,12 +1,22 @@
 {
-  "updatedAt": "2026-08-05T14:31:40.463266+00:00",
+  "updatedAt": "2026-08-05T17:53:19.559391+00:00",
   "quotes": [
+    {
+      "symbol": "000001.XSHE",
+      "name": "000001",
+      "price": 11.25,
+      "change": -0.1899999999999995,
+      "changePercent": -0.01660839160839156,
+      "asOf": "2026-08-05",
+      "source": "akshare daily snapshot",
+      "delayed": true
+    },
     {
       "symbol": "AAPL",
       "name": "AAPL",
-      "price": 306.6199951171875,
-      "change": -2.760009765625,
-      "changePercent": -0.008921099366684837,
+      "price": 309.05999755859375,
+      "change": -0.32000732421875,
+      "changePercent": -0.0010343503754871586,
       "asOf": "2026-08-05 00:00:00-04:00",
       "source": "yfinance snapshot",
       "delayed": true
