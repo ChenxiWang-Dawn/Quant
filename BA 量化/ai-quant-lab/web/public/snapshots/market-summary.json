@@ -1,12 +1,12 @@
 {
-  "updatedAt": "2026-09-11T20:56:31.376796+00:00",
+  "updatedAt": "2026-09-12T00:16:52.939399+00:00",
   "quotes": [
     {
       "symbol": "AAPL",
       "name": "AAPL",
-      "price": 332.2699890136719,
-      "change": 5.699981689453125,
-      "changePercent": 0.017454088133066703,
+      "price": NaN,
+      "change": NaN,
+      "changePercent": NaN,
       "asOf": "2026-09-11 00:00:00-04:00",
       "source": "yfinance snapshot",
       "delayed": true
