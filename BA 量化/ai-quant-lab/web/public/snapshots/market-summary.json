@@ -1,13 +1,13 @@
 {
-  "updatedAt": "2026-09-25T23:17:57.069303+00:00",
+  "updatedAt": "2026-09-28T05:20:19.084353+00:00",
   "quotes": [
     {
       "symbol": "000001.XSHE",
       "name": "000001",
-      "price": 11.3,
-      "change": -0.049999999999998934,
-      "changePercent": -0.004405286343612258,
-      "asOf": "2026-09-24",
+      "price": 11.31,
+      "change": 0.009999999999999787,
+      "changePercent": 0.0008849557522123686,
+      "asOf": "2026-09-28",
       "source": "akshare daily snapshot",
       "delayed": true
     },
