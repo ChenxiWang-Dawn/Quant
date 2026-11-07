@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-06T21:33:05.692585+00:00",
+  "updatedAt": "2026-11-07T01:59:00.470297+00:00",
   "quotes": [
     {
       "symbol": "000001.XSHE",
@@ -7,7 +7,7 @@
       "price": 11.81,
       "change": 0.17,
       "changePercent": 0.0146,
-      "asOf": "2026-11-06T21:30:50.113145+00:00",
+      "asOf": "2026-11-07T01:56:29.130050+00:00",
       "source": "akshare snapshot",
       "delayed": true
     },
@@ -17,7 +17,7 @@
       "price": 1453.0,
       "change": 1.0,
       "changePercent": 0.0007000000000000001,
-      "asOf": "2026-11-06T21:33:05.184811+00:00",
+      "asOf": "2026-11-07T01:58:59.327818+00:00",
       "source": "akshare snapshot",
       "delayed": true
     },
